@@ -7,5 +7,5 @@ implementing static nonpharmaceutical interventions (NPIs) as well as dynamic NP
 get into play once predefined incidence thresholds (50 and 200) are exceeded.
 The Parameters `TimeExposed` and `TimeInfectedNoSymptoms` can be derived from the serial interval and incubation period, as delineated by Khailaie and Mitra et al. (https://doi.org/10.1186/s12916-020-01884-4).
 
-# Requirements
+## Requirements
 We require the libraries `JsonCpp` and `HDF5` for running the simulations (these are optional for the MEmilio project, see [MEmilio cpp README](https://github.com/SciCompMod/memilio/blob/main/cpp/README.md)).

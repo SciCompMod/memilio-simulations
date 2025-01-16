@@ -5,7 +5,7 @@
 # The path to the virtual environment activation function has to be adjusted manually
 # Otherwise the script can be called with -PATH_ENV Path argument, e.g.
 # sh data_generation.sh -PATH_ENV "YOUR/PATH/TO/VIRTUAL/ENV/activate"
-path_virtual_env="/localdata1/kueh_mj/virtual_envs/corona-py388/bin/activate" 
+path_virtual_env="/localdata1/ploe_le/code/memilio/virtualenv/bin/activate" 
 
 # Use/check for input argument
 while [[ $# -gt 0 ]]; do
@@ -28,8 +28,8 @@ then echo "Set path to virtual environment activation function to an existing py
 else source $path_virtual_env
 fi
 
-# path to MEmilio dir (assumes execution of the script from the `simulations` folder)
-cd ../..
+# path to MEmilio dir (assumes execution of the script from the current folder)
+cd build/_deps/memilio-src/
 data_dir=$PWD/data/pydata
 
 # download data

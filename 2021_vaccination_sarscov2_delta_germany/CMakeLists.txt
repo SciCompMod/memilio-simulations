@@ -16,8 +16,6 @@ FetchContent_Declare(
   memilio
   GIT_REPOSITORY https://github.com/SciCompMod/memilio.git
   GIT_TAG ${GIT_TAG_MEMILIO}
-  GIT_SHALLOW TRUE
-  GIT_PROGRESS TRUE
 )
 
 FetchContent_MakeAvailable(memilio)

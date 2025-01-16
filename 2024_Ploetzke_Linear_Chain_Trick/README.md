@@ -7,5 +7,5 @@ https://doi.org/10.48550/arXiv.2412.09140.
 
 Below is an overview of the files and the paper sections they belong to.
 
-# Requirements
+## Requirements
 We require the libraries `JsonCpp` and `HDF5` for running the simulations (these are optional for the MEmilio project, see [MEmilio cpp README](https://github.com/SciCompMod/memilio/blob/main/cpp/README.md)).
