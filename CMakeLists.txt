@@ -10,6 +10,9 @@ option(BUILD_2021_vaccination_sarscov2_delta_germany "Build simulations from fol
 option(BUILD_munich_graph_sim "Build simulations from folder munich_graph_sim." OFF)
 option(BUILD_2024_Ploetzke_Linear_Chain_Trick "Build simulations from folder 2024_Ploetzke_Linear_Chain_Trick." OFF)
 
+# We require the library hdf5 for all targets.
+find_package(HDF5 REQUIRED)
+
 if(BUILD_2020_npis_sarscov2_wildtype_germany)
   if(NOT EXISTS "${CMAKE_SOURCE_DIR}/2020_npis_sarscov2_wildtype_germany/build")
     execute_process(COMMAND mkdir "build/" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2020_npis_sarscov2_wildtype_germany")

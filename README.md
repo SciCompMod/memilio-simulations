@@ -30,7 +30,7 @@ You can run a simulation with e.g.:
 Furthermore, you can specify the maximum number of concurrent processes to use when building by setting the variable `NUM_JOBS_BUILD`. Using a value higher than `1` could speed up the build process. The default of this variable is `1`. With this specification, the build process should work for every hardware and operating system. 
 
 ## Requirements
-For most simulations, we require the libraries `JsonCpp` and `HDF5` for running the simulations (these are optional for the MEmilio project, see [MEmilio cpp README](https://github.com/SciCompMod/memilio/blob/main/cpp/README.md)). Please have a look at the folder READMEs for further specifications.
+For most simulations, we require the libraries `JsonCpp` and `HDF5` for running the simulations (these are optional for the MEmilio project, see [MEmilio cpp README](https://github.com/SciCompMod/memilio/blob/main/cpp/README.md)). The git repo of the library `JsonCpp` is still bundled with MEmilio while `HDF5` is not. Please have a look at the folder READMEs for further specifications.
 
 ## Information for Developer
 If you want to create a new folder, e.g. for the files of a new paper, you should follow the steps below:
