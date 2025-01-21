@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.13)
 
 project(memilio-simulations-2021-vaccination VERSION 1.0.0)
 
+# Executables should be stored in the build/bin/ folder.
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
 # Download MEmilio with the git tag defined in git_tag.cmake.
 include(${CMAKE_SOURCE_DIR}/git_tag.cmake)
 # If git tag is not set, throw error.

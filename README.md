@@ -1,30 +1,31 @@
 # MEmilio-simulations
 This Repository contains simulations using the library [MEmilio](https://github.com/SciCompMod/memilio).
-In this Repo, the simulations are connected with the MEmilio version used to create the simulations. 
-This way, the outputs should be easy to recreate. 
-All files used to create outputs used e.g. for paper simulations, can be included. 
-The scripts do not necessarily have to be portable (e.g. some shellscripts), but they worked locally. Please be aware of tis when using the files.
+The simulations are connected with the MEmilio version used to create the simulations. 
+This way, simulation outputs should be easy to recreate. 
+Developer can upload all related scripts, so e.g. plotscripts etc. are additionally provided. 
+The scripts do not necessarily have to be portable (e.g. some shellscripts), but they worked locally. Please be aware of this when using the files.
 
 ## Configuring using CMake
 
-To configure with default options (no simulations will be built):
+To configure and build a simulation, choose one option from the list below and run:
 ```bash
 mkdir build && cd build
-cmake ..
+cmake .. -D<OPTION>=ON
 ```
-
-You can specify which simulation folders to build by specifying options via `cmake .. -D<OPTION>=<VALUE>`.
-All options can be set to ON or OFF and the default value is always OFF. Please check the README of the subdirectories for details about the simulations.
-The following options can be set:
+Please check the README of the subdirectories for details about the simulations.
+The following `<OPTION>`s can be set:
 - `BUILD_2020_npis_sarscov2_wildtype_germany`
 - `BUILD_2021_vaccination_sarscov2_delta_germany`
 - `BUILD_munich_graph_sim`
 - `BUILD_2024_Ploetzke_Linear_Chain_Trick`.
 
+If you do not set an option, no simulation will be built. After a simulation has been built, you can prevent cmake from rebuilding it by setting `cmake .. -D<OPTION>=OFF`, although rebuilding should only take a few seconds. You can also set multiple options at once by adding more pairs ` -D<OPTION>=<VALUE>` to the end, with `<VALUE>` being either `ON` or `OFF`.
+
+
 A build folder with the correct MEmilio version will be created in each subdirectory. 
 You can run a simulation with e.g.:
 ```bash
-./2020_npis_sarscov2_wildtype_germany/build/2020_npis_wildtype
+../2020_npis_sarscov2_wildtype_germany/build/bin/2020_npis_wildtype
 ```
 Furthermore, you can specify the maximum number of concurrent processes to use when building by setting the variable `NUM_JOBS_BUILD`. Using a value higher than `1` could speed up the build process. The default of this variable is `1`. With this specification, the build process should work for every hardware and operating system. 
 
@@ -32,11 +33,64 @@ Furthermore, you can specify the maximum number of concurrent processes to use w
 For most simulations, we require the libraries `JsonCpp` and `HDF5` for running the simulations (these are optional for the MEmilio project, see [MEmilio cpp README](https://github.com/SciCompMod/memilio/blob/main/cpp/README.md)). Please have a look at the folder READMEs for further specifications.
 
 ## Information for Developer
-If you want to create a new folder, e.g. for the files for a new paper, then you should follow the steps below:
+If you want to create a new folder, e.g. for the files of a new paper, you should follow the steps below:
 
 - Create a folder with a descriptive name.
 - Put all related files in it. 
-- Add a `CMakeLists.txt` and define a unique project name as well as a part to download MEmilio and create your targets linking the MEmilio targets.
-- In a `git_tag.cmake`, define a git tag for the MEmilio version used (can be a commit hash or a branch name).
-- In the global `CMakeLists.txt`, add an option for your new content and the commands to build your files using the local `CMakeLists.txt`. Please also add the option to the current `README.md`. 
+- In a file `git_tag.cmake`, define a git tag for the MEmilio version used (can be a commit hash or a branch name).
+This is done using the line
+```bash
+set(GIT_TAG_MEMILIO <commit_hash>)
+```
+- Add a `CMakeLists.txt` and define a unique project name. Additionally add the code block 
+
+```bash
+# Executables should be stored in the build/bin/ folder.
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+```
+
+for the stated reason. 
+We need a code block to download MEmilio with the version defined in `git_tag.cmake`:
+
+```bash
+# Download MEmilio with the git tag defined in git_tag.cmake.
+include(${CMAKE_SOURCE_DIR}/git_tag.cmake)
+# If git tag is not set, throw error.
+if(NOT DEFINED GIT_TAG_MEMILIO)
+    message(FATAL_ERROR "GIT_TAG_MEMILIO is not defined. Please make sure the git_tag.cmake file is correct.")
+endif()
+
+# FetchContent to fetch the MEmilio library in the correct version.
+include(FetchContent)
+    
+FetchContent_Declare(
+memilio
+GIT_REPOSITORY https://github.com/SciCompMod/memilio.git
+GIT_TAG ${GIT_TAG_MEMILIO}
+)
+
+FetchContent_MakeAvailable(memilio)
+
+# Disable some options for the build.
+set(MEMILIO_BUILD_TESTS OFF)
+set(MEMILIO_BUILD_EXAMPLES OFF)
+set(MEMILIO_BUILD_SIMULATIONS OFF)
+
+# Add the subdirectory for MEmilio build.
+add_subdirectory(${memilio_SOURCE_DIR}/cpp ${memilio_BINARY_DIR})
+```
+
+ as well as a part create your targets linking the MEmilio targets.
+
+- In the global `CMakeLists.txt`, add an option `BUILD_<FolderName>` for your new content and the commands to build your files using the local `CMakeLists.txt`:
+```bash
+if(BUILD_<FolderName>)
+  if(NOT EXISTS "${CMAKE_SOURCE_DIR}/<FolderName>/build")
+    execute_process(COMMAND mkdir "build/" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/<FolderName>")
+  endif()
+  execute_process(COMMAND cmake ".." WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/<FolderName>/build")
+  execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/<FolderName>/build")
+endif()
+```
+Please also add the option to the current `README.md`. 
 - Clearly state all requirements in your `README.md` (e.g. hdf5) as we cannot access the MEmilio variables MEMILIO_HAS... to control the requirements in CMake.
