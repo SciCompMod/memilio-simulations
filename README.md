@@ -1,9 +1,9 @@
 # MEmilio-simulations
 This Repository contains simulations using the library [MEmilio](https://github.com/SciCompMod/memilio).
-The simulations are connected with the MEmilio version used to create the simulations. 
-This way, simulation outputs should be easy to recreate. 
-Developer can upload all related scripts, so e.g. plotscripts etc. are additionally provided. 
-The scripts do not necessarily have to be portable (e.g. some shellscripts), but they worked locally. Please be aware of this when using the files.
+Each simulation is in a separate folder, containing the version of MEmilio used to create the simulations. 
+This way, simulation results should be easy to recreate.
+
+Additional scripts used for the creation of published simulation results may be provided in each folder, for example for plotting, gathering data or pre-/post-processing. These scripts are provided as a reference, without any guarantee that they will work correctly outside of the environment they were written in. Do not use them without prior inspection.
 
 ## Configuring using CMake
 
@@ -32,7 +32,7 @@ Furthermore, you can specify the maximum number of concurrent processes to use w
 ## Requirements
 For most simulations, we require the libraries `JsonCpp` and `HDF5` for running the simulations (these are optional for the MEmilio project, see [MEmilio cpp README](https://github.com/SciCompMod/memilio/blob/main/cpp/README.md)). The git repo of the library `JsonCpp` is still bundled with MEmilio while `HDF5` is not. Please have a look at the folder READMEs for further specifications.
 
-## Information for Developer
+## Information for Developers
 If you want to create a new folder, e.g. for the files of a new paper, you should follow the steps below:
 
 - Create a folder with a descriptive name.
@@ -80,7 +80,7 @@ set(MEMILIO_BUILD_SIMULATIONS OFF)
 add_subdirectory(${memilio_SOURCE_DIR}/cpp ${memilio_BINARY_DIR})
 ```
 
- as well as a part create your targets linking the MEmilio targets.
+Finally, create a compilation target for the simulation, and link all required libraries, like memilio or the model libraries used by the simulation.
 
 - In the global `CMakeLists.txt`, add an option `BUILD_<FolderName>` for your new content and the commands to build your files using the local `CMakeLists.txt`:
 ```bash
