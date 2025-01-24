@@ -6,7 +6,7 @@ This way, simulation results should be easy to recreate.
 ## Disclaimer
 Additional scripts used for the creation of published simulation results may be provided in each folder, for example for plotting, gathering data or pre-/post-processing. These scripts are provided as a reference, without any guarantee that they will work correctly outside of the environment they were written in. Do not use them without prior inspection.
 
-In addition, some scripts depend on external data sources. Related files are maintained in the main branch of the MEmilio repository, but it is not guaranteed that the scripts will work in the version fetched for the specific simulation. For example, links to data sources may be updated in MEmilio if an old link has expired, but cannot be adapted in the version used.
+In addition, some scripts, like the memilio-epidata tools in the pycode folder of MEmilio, depend on external data sources. Expired links will be updated or replaced in the main branch of the MEmilio repository, but these updates are not brought to the specific versions of MEmilio used by the simulations here. You may try to use links or scripts from the [current version of MEmilio](https://github.com/SciCompMod/memilio), but be aware that they may be incompatible due to structural changes in the data sources or code.
 
 ## Configuring using CMake
 To configure and build a simulation, choose one option from the list below and run:
