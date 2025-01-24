@@ -27,6 +27,7 @@ FetchContent_MakeAvailable(memilio)
 set(MEMILIO_BUILD_TESTS OFF)
 set(MEMILIO_BUILD_EXAMPLES OFF)
 set(MEMILIO_BUILD_SIMULATIONS OFF)
+set(MEMILIO_ENABLE_OPENM OFF)
 
 # Add the subdirectory for MEmilio build.
 add_subdirectory(${memilio_SOURCE_DIR}/cpp ${memilio_BINARY_DIR})
@@ -36,5 +37,18 @@ if(NOT DEFINED NUM_SUBCOMPARTMENTS)
   set(NUM_SUBCOMPARTMENTS "42")
 endif()
 add_definitions(-DNUM_SUBCOMPARTMENTS=${NUM_SUBCOMPARTMENTS})
+
 add_executable(lct_impact_distribution_assumption lct_impact_distribution_assumption.cpp)
 target_link_libraries(lct_impact_distribution_assumption PRIVATE memilio lct_secir)
+
+add_executable(lct_impact_age_resolution lct_impact_age_resolution.cpp)
+target_link_libraries(lct_impact_age_resolution PRIVATE memilio lct_secir)
+
+add_executable(lct_covid19_inspired_scenario lct_covid19_inspired_scenario.cpp)
+target_link_libraries(lct_covid19_inspired_scenario PRIVATE memilio lct_secir)
+
+if (MEMILIO_ENABLE_OPENMP)
+  add_executable(lct_runtime lct_runtime.cpp)
+  target_link_libraries(lct_runtime PRIVATE memilio lct_secir)
+  # target_compile_options(lct_runtime PRIVATE -O0)
+endif()
