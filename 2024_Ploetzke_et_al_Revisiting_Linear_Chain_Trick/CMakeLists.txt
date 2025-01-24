@@ -47,6 +47,7 @@ target_link_libraries(lct_impact_age_resolution PRIVATE memilio lct_secir)
 add_executable(lct_covid19_inspired_scenario lct_covid19_inspired_scenario.cpp)
 target_link_libraries(lct_covid19_inspired_scenario PRIVATE memilio lct_secir)
 
+# Just build run time measurement target if MEMILIO_ENABLE_OPENMP is explicitly set to on.
 if (MEMILIO_ENABLE_OPENMP)
   add_executable(lct_runtime lct_runtime.cpp)
   target_link_libraries(lct_runtime PRIVATE memilio lct_secir)
