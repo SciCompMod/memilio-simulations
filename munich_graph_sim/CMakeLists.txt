@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 
-project(memilio-simulations-munich-graph VERSION 1.0.0)
+project(memilio-simulations-munich_graph_sim VERSION 1.0.0)
 
 # Executables should be stored in the build/bin/ folder.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")

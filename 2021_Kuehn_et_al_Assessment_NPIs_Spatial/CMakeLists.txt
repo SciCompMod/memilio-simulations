@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 
-project(memilio-simulations-2020-npis VERSION 1.0.0)
+project(memilio-simulations-2021_Kuehn_et_al_Assessment VERSION 1.0.0)
 
 # Executables should be stored in the build/bin/ folder.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
@@ -31,6 +31,6 @@ set(MEMILIO_BUILD_SIMULATIONS OFF)
 # Add the subdirectory for MEmilio build.
 add_subdirectory(${memilio_SOURCE_DIR}/cpp ${memilio_BINARY_DIR})
 
-add_executable(2020_npis_wildtype 2020_npis_sarscov2_wildtype_germany.cpp)
-target_link_libraries(2020_npis_wildtype PRIVATE memilio ode_secir Boost::filesystem)
+add_executable(npis_sarscov2_wildtype_germany npis_sarscov2_wildtype_germany.cpp)
+target_link_libraries(npis_sarscov2_wildtype_germany PRIVATE memilio ode_secir Boost::filesystem)
 

@@ -1,4 +1,11 @@
-# 2021_vaccination_sarscov2_delta_germany #
+# Appropriate relaxation of non-pharmaceutical interventions minimizes the risk of a resurgence in SARS-CoV-2 infections in spite of the Delta variant #
+
+This directory contains the simulation file [vaccination_sarscov2_delta_germany](vaccination_sarscov2_delta_germany.cpp) related to the paper
+
+- _Wadim Koslow, Martin J. Kühn, Sebastian Binder, Margrit Klitz, Daniel Abele, Achim Basermann, Michael Meyer-Hermann. Appropriate relaxation of non-pharmaceutical interventions minimizes the risk of a resurgence in SARS-CoV-2 infections in spite of the Delta variant, PLOS Computational Biology (2022)._ 
+https://doi.org/10.1016/j.mbs.2021.108648.
+
+
 Extending the model of [2020_npis_sarscov2_wildtype_germany](../2020_npis_sarscov2_wildtype_germany) by vaccination and reinfection and considering the effect of vaccination in combination with the lifting of NPIs during the arrival of Delta.
 
 ## Data availability

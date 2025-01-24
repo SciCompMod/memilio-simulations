@@ -16,10 +16,10 @@ cmake .. -D<OPTION>=ON
 ```
 Please check the README of the subdirectories for details about the simulations.
 The following `<OPTION>`s can be set:
-- `BUILD_2020_npis_sarscov2_wildtype_germany`
-- `BUILD_2021_vaccination_sarscov2_delta_germany`
-- `BUILD_munich_graph_sim`
-- `BUILD_2024_Ploetzke_Linear_Chain_Trick`.
+- `BUILD_2021_Kuehn_et_al_Assessment`
+- `BUILD_2022_Koslow_et_al_Appropriate`
+- `BUILD_2024_Ploetzke_et_al_Revisiting`
+- `BUILD_munich_graph_sim`.
 
 If you do not set an option, no simulation will be built. After a simulation has been built, you can prevent cmake from rebuilding it by setting `cmake .. -D<OPTION>=OFF`, although rebuilding should only take a few seconds. You can also set multiple options at once by adding more pairs ` -D<OPTION>=<VALUE>` to the end, with `<VALUE>` being either `ON` or `OFF`.
 
@@ -27,7 +27,7 @@ If you do not set an option, no simulation will be built. After a simulation has
 A build folder with the correct MEmilio version will be created in each subdirectory. 
 You can run a simulation with e.g.:
 ```bash
-../2020_npis_sarscov2_wildtype_germany/build/bin/2020_npis_wildtype
+../2021_Kuehn_et_al_Assessment_NPIs_Spatial/build/bin/npis_sarscov2_wildtype_germany
 ```
 Furthermore, you can specify the maximum number of concurrent processes to use when building by setting the variable `NUM_JOBS_BUILD`. Using a value higher than `1` could speed up the build process. The default of this variable is `1`. With this specification, the build process should work for every hardware and operating system. 
 
@@ -39,14 +39,15 @@ For most simulations, we require the libraries `JsonCpp` and `HDF5` for running 
 ## Information for Developers
 If you want to create a new folder, e.g. for the files of a new paper, you should follow the steps below:
 
-- Create a folder with a descriptive name.
+- Create a folder with a descriptive name. Typically, we use `<Year>_<FirstAuthor>_et_al_<FirstWordTitle>_<AdditionalWords>`.
+The name should clearly indicate the paper to which the folder is related.
 - Put all related files in it. 
 - In a file `git_tag.cmake`, define a git tag for the MEmilio version used (can be a commit hash or a branch name).
 This is done using the line
 ```bash
 set(GIT_TAG_MEMILIO <commit_hash>)
 ```
-- Add a `CMakeLists.txt` and define a unique project name. Additionally add the code block 
+- Add a `CMakeLists.txt` and define a unique project name (typically `memilio-simulations-<Year>_<FirstAuthor>_et_al_<FirstWordTitle>`). Additionally add the code block 
 
 ```bash
 # Executables should be stored in the build/bin/ folder.
@@ -84,11 +85,11 @@ set(MEMILIO_BUILD_SIMULATIONS OFF)
 add_subdirectory(${memilio_SOURCE_DIR}/cpp ${memilio_BINARY_DIR})
 ```
 
-Finally, create a compilation target for the simulation, and link all required libraries, like memilio or the model libraries used by the simulation.
+Finally, create compilation targets for the `.cpp`-files, and link all required libraries, like memilio or the model libraries used by the simulation.
 
-- In the global `CMakeLists.txt`, add an option `BUILD_<FolderName>` for your new content and the commands to build your files using the local `CMakeLists.txt`:
+- In the global `CMakeLists.txt`, add an option `BUILD_<Year>_<FirstAuthor>_et_al_<FirstWordTitle>` for your new content and the commands to build your files using the local `CMakeLists.txt`:
 ```bash
-if(BUILD_<FolderName>)
+if(BUILD_<Year>_<FirstAuthor>_et_al_<FirstWordTitle>)
   if(NOT EXISTS "${CMAKE_SOURCE_DIR}/<FolderName>/build")
     execute_process(COMMAND mkdir "build/" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/<FolderName>")
   endif()

@@ -1,8 +1,8 @@
 # Revisiting the Linear Chain Trick in epidemiological models: Implications of underlying assumptions for numerical solutions #
 
-In this directory you will find all files related to the Paper 
+This directory contains all files related to the paper
 
-- _Lena Plötzke , Anna Wendler , René Schmieding , Martin J. Kühn (2024). Revisiting the Linear Chain Trick in epidemiological models: Implications of underlying assumptions for numerical solutions._ 
+- _Lena Plötzke, Anna Wendler, René Schmieding, Martin J. Kühn. Revisiting the Linear Chain Trick in epidemiological models: Implications of underlying assumptions for numerical solutions,  (2024)._ 
 https://doi.org/10.48550/arXiv.2412.09140.
 
 Below is an overview of the files and the paper sections they belong to.

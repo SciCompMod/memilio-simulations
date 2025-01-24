@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 
-project(memilio-simulations-2021-vaccination VERSION 1.0.0)
+project(memilio-simulations-2024_Ploetzke_et_al_Revisiting VERSION 1.0.0)
 
 # Executables should be stored in the build/bin/ folder.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
@@ -31,6 +31,10 @@ set(MEMILIO_BUILD_SIMULATIONS OFF)
 # Add the subdirectory for MEmilio build.
 add_subdirectory(${memilio_SOURCE_DIR}/cpp ${memilio_BINARY_DIR})
 
-add_executable(2021_vaccination_delta 2021_vaccination_sarscov2_delta_germany.cpp)
-target_link_libraries(2021_vaccination_delta PRIVATE memilio ode_secirvvs Boost::filesystem)
-
+# Variables as MEMILIO_HAS_HDF5 are not in the current scope and cannot be used.
+if(NOT DEFINED NUM_SUBCOMPARTMENTS)
+  set(NUM_SUBCOMPARTMENTS "42")
+endif()
+add_definitions(-DNUM_SUBCOMPARTMENTS=${NUM_SUBCOMPARTMENTS})
+add_executable(lct_impact_distribution_assumption lct_impact_distribution_assumption.cpp)
+target_link_libraries(lct_impact_distribution_assumption PRIVATE memilio lct_secir)
