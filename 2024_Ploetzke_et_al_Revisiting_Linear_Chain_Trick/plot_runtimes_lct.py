@@ -20,7 +20,7 @@
 """@plot_runtimes_lct.py
 Functions to create the plots for section 4.5 of the paper.
 
-The results of time measurements to be plotted should be stored in a folder 'lct_runtimes' in the current directory as 
+The results of time measurements to be plotted should be stored in a folder 'lct_runtimes' in the 'simulation_result' directory as 
 '.txt' files and should be named as used in the main() function.
 Have a look at the README for an explanation of how to measure the run times. 
 The run times are contained in the '.out' file of the job. Just copy the whole output in a '.txt' file.
