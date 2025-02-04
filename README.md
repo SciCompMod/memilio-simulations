@@ -19,6 +19,7 @@ The following `<OPTION>`s can be set:
 - `BUILD_2021_Kuehn_et_al_Assessment`
 - `BUILD_2022_Koslow_et_al_Appropriate`
 - `BUILD_2024_Ploetzke_et_al_Revisiting`
+- `BUILD_2024_Wendler_et_al_Nonstandard`
 - `BUILD_munich_graph_sim`.
 
 If you do not set an option, no simulation will be built. After a simulation has been built, you can prevent cmake from rebuilding it by setting `cmake .. -D<OPTION>=OFF`, although rebuilding should only take a few seconds. You can also set multiple options at once by adding more pairs ` -D<OPTION>=<VALUE>` to the end, with `<VALUE>` being either `ON` or `OFF`.
