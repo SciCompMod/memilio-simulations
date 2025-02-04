@@ -25,6 +25,7 @@ The results can be visualized with [plot_changepoints](plot_changepoints.py).
 
 - Section 6: The share of the population in the considered age groups that we expect to be in the ICU in June and October in comparison to the proportion of each age group in Germany is visualized using [investigate_age_distribution](investigate_age_distribution.py). This is done using age-resolved data on reported cases which can be obtained by executing [download_reported_data](download_reported_data.py).
 
+In the provided scripts, we set paths to determine where results will be saved to or where data is read from. The default values are valid if the scripts (both cpp and python) are executed in the folder 2024_Wendler_et_al_Nonstandard_Numerical_Scheme. 
 
 # Requirements
 We require the libraries `JsonCpp` and `HDF5` for running the scripts (these are optional for the whole project, see [README](../../README.md)).

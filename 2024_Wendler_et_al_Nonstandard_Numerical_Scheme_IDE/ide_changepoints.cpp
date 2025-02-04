@@ -390,13 +390,22 @@ mio::IOResult<void> simulate_ode_model(Vector init_compartments, ScalarType cont
     return mio::success();
 }
 
-int main()
+/** 
+* Usage: ide_changepoints <result_dir>
+* The command line argument is optional. Default values are provided if not specified.
+*/
+int main(int argc, char** argv)
 {
-    // Directory where results will be stored. If this string is empty, results will not be saved.
-    // Path is valid if file is executed e.g. in memilio/build/bin.
-    std::string save_dir = "../../data/simulation_results/changepoints/";
+    // Default path is valid if script is executed in e.g. memilio-simulations/2024_Wendler_et_al_Nonstandard_numerical_scheme_IDE.
+    std::string result_dir = "./simulation_results/changepoints/";
+
+    // Set result_dir via command line.
+    if (argc == 2) {
+        result_dir = argv[1];
+    }
+
     // Make folder if not existent yet.
-    boost::filesystem::path dir(save_dir);
+    boost::filesystem::path dir(result_dir);
     boost::filesystem::create_directories(dir);
 
     // Define tmax for both scenarios.
@@ -405,7 +414,7 @@ int main()
     // Changepoint scenario with halving of contacts after two days.
     ScalarType contact_scaling = 0.5;
 
-    auto result_ide = simulate_ide_model(contact_scaling, tmax, save_dir);
+    auto result_ide = simulate_ide_model(contact_scaling, tmax, result_dir);
     if (!result_ide) {
         printf("%s\n", result_ide.error().formatted_message().c_str());
         return -1;
@@ -414,7 +423,7 @@ int main()
     // Use compartments at time 0 from IDE simulation as initial values for ODE model to make results comparable.
     Vector compartments = result_ide.value().get_value(0);
 
-    auto result_ode = simulate_ode_model(compartments, contact_scaling, tmax, save_dir);
+    auto result_ode = simulate_ode_model(compartments, contact_scaling, tmax, result_dir);
     if (!result_ode) {
         printf("%s\n", result_ode.error().formatted_message().c_str());
         return -1;
@@ -423,7 +432,7 @@ int main()
     // Changepoint scenario with doubling of contacts after two days.
     contact_scaling = 2.;
 
-    result_ide = simulate_ide_model(contact_scaling, tmax, save_dir);
+    result_ide = simulate_ide_model(contact_scaling, tmax, result_dir);
     if (!result_ide) {
         printf("%s\n", result_ide.error().formatted_message().c_str());
         return -1;
@@ -432,7 +441,7 @@ int main()
     // Use compartments at time 0 from IDE simulation as initial values for ODE model to make results comparable.
     compartments = result_ide.value().get_value(0);
 
-    result_ode = simulate_ode_model(compartments, contact_scaling, tmax, save_dir);
+    result_ode = simulate_ode_model(compartments, contact_scaling, tmax, result_dir);
     if (!result_ode) {
         printf("%s\n", result_ode.error().formatted_message().c_str());
         return -1;

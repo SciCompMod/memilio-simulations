@@ -102,15 +102,15 @@ def plot_changepoint(files, fileending, save_dir=""):
 
 
 if __name__ == '__main__':
-    # Paths are valid if script is executed e.g. in
-    # memilio/cpp/simulations/2024_Wendler_Nonstandard_numerical_scheme_for_integro-differential_model.
+    # Paths are valid if script is executed in e.g.
+    # memilio-simulations/2024_Wendler_et_al_Nonstandard_Numerical_scheme_IDE.
 
     # Path where simulation results (generated with ide_changepoints.cpp) are stored.
     result_dir = os.path.join(os.path.dirname(
-        __file__), "../../..", "data/simulation_results/changepoints/")
+        __file__), "./simulation_results/changepoints/")
     # Path where plots will be stored.
     plot_dir = os.path.join(os.path.dirname(
-        __file__), "../../..", "data/plots/changepoints/")
+        __file__), "./plots/changepoints/")
 
     plot_changepoint([os.path.join(result_dir, f"changepoint_ode_0.5_12_0.0100_flows"),
                      os.path.join(result_dir, f"changepoint_ide_0.5_12_0.0100_flows")],

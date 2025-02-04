@@ -30,7 +30,7 @@ def get_df_daily(data_dir):
     @returns Dataframe with daily data on confirmed cases and deaths.
     """
     # Read file.
-    datafile = os.path.join(data_dir, "pydata", "Germany",
+    datafile = os.path.join(data_dir, "Germany",
                             "cases_all_age_all_dates.json")
     df = pd.read_json(datafile)
 
@@ -162,16 +162,16 @@ def plot_proportions_per_age_group(data_dir, start_dates, T_IH, T_HU, T_U, save_
 
 
 def main():
-    # Paths are valid if script is executed e.g. in
-    # memilio/cpp/simulations/2024_Wendler_Nonstandard_numerical_scheme_for_integro-differential_model.
+    # Paths are valid if script is executed in e.g.
+    # memilio-simulations/2024_Wendler_et_al_Nonstandard_Numerical_scheme_IDE.
 
     # Path where file with RKI case data is stored.
     data_dir = os.path.join(os.path.dirname(
-        __file__), "../../..", "data/")
+        __file__), "./data/")
 
     # Path where plots will be stored.
     save_dir = os.path.join(os.path.dirname(
-        __file__), "../../..", "data/plots/")
+        __file__), "./plots/")
 
     # Mean stay times according to Covasim paper.
     T_IH = 6.6

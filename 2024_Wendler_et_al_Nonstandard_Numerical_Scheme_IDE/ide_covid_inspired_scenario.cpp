@@ -540,18 +540,34 @@ mio::IOResult<void> simulate_ode_model(mio::Date start_date, ScalarType tmax, Ve
     return mio::success();
 }
 
+/** 
+* Usage: ide_covid_inspired_scenario <contact_data_dir> <reported_data_dir> <result_dir> <start_date.year> 
+    <start_date.month> <start_date.day> <tmax> <dt> <scale_contacts>
+* One can set either no command line arguments, the first three arguments for the necessary paths or all command line 
+* arguments as described above. Default values are provided if the arguments are not specified.
+*/
 int main(int argc, char** argv)
 {
-    // Paths are valid if file is executed e.g. in memilio/build/bin.
+    // Default paths are valid if script is executed in e.g. memilio-simulations/2024_Wendler_et_al_Nonstandard_numerical_scheme_IDE.
+
     // Directory where contact data is stored.
-    std::string contact_data_dir  = "../../data/contacts/";
-    std::string reported_data_dir = "../../pydata/Germany/";
+    std::string contact_data_dir = "./build/_deps/memilio-src/data/contacts/";
+    // Directory where reported data is stored.
+    std::string reported_data_dir = "./data/Germany/";
     // Directory where results will be stored. If this string is empty, results will not be saved.
-    std::string result_dir = "../../data/simulation_results/covid_inspired_scenario/";
+    std::string result_dir = "./simulation_results/covid_inspired_scenario/";
 
     mio::Date start_date(2020, 10, 01);
 
     ScalarType tmax = 45;
+
+    // Set paths from command line.
+    if (argc == 3) {
+
+        contact_data_dir  = argv[1];
+        reported_data_dir = argv[2];
+        result_dir        = argv[3];
+    }
 
     // To adjust the parameter scale_contacts so that the IDE simulation results match the reported data in the
     // beginning, we run the scenario twice. First we run it with scale_contacts = 1, then we compute the adjusted

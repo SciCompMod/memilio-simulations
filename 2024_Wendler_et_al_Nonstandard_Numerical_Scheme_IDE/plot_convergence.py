@@ -327,16 +327,16 @@ def compute_order_of_convergence(errors, timesteps_ide, flows=False):
 
 
 def main():
-    # Paths are valid if script is executed e.g. in
-    # memilio/cpp/simulations/2024_Wendler_Nonstandard_numerical_scheme_for_integro-differential_model.
+    # Paths are valid if script is executed in e.g.
+    # memilio-simulations/2024_Wendler_et_al_Nonstandard_Numerical_scheme_IDE.
 
     # Path where simulation results (generated with ide_convergence_rate.cpp) are stored.
     result_dir = os.path.join(os.path.dirname(
-        __file__), "../../..", "data/simulation_results/convergence/")
+        __file__), "./simulation_results/convergence/")
 
     # Path where plots will be stored.
     plot_dir = os.path.join(os.path.dirname(
-        __file__), "../../..", "data/plots/convergence/")
+        __file__), "./plots/convergence/")
 
     # The ODE model was simulated using a fixed step size dt=10^{-ode_exponent}.
     ode_exponent = 6
@@ -375,7 +375,12 @@ def main():
         order = compute_order_of_convergence(
             relerrors_l2, timesteps_ide, flow_bool)
 
-        print('Orders of convergence: ', order)
+        if flow_bool:
+            result_type = "flows"
+        else:
+            result_type = "compartments"
+
+        print(f"Orders of convergence for {result_type}: \n", order)
 
 
 if __name__ == '__main__':

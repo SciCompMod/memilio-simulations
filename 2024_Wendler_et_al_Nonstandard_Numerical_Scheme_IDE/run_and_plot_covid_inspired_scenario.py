@@ -60,7 +60,7 @@ def run_covid_inspired_scenario(result_dir, contact_data_dir, reported_data_dir,
     month = start_date.split("-")[1]
     day = start_date.split("-")[2]
 
-    subprocess.call([f"./../../../build/bin/ide_covid_inspired_scenario", contact_data_dir, reported_data_dir,  result_dir,
+    subprocess.call([f"./build/bin/ide_covid_inspired_scenario", contact_data_dir, reported_data_dir,  result_dir,
                      f"{year}", f"{month}", f"{day}", f"{simulation_time}", f"{timestep}", f"{scale_contacts}"])
 
 
@@ -583,24 +583,24 @@ def main():
     simulation_time = 45
     timestep = "0.0100"
 
-    # Paths are valid if script is executed e.g. in
-    # memilio/cpp/simulations/2024_Wendler_Nonstandard_numerical_scheme_for_integro-differential_model.
+    # Paths are valid if script is executed in e.g.
+    # memilio-simulations/2024_Wendler_et_al_Nonstandard_Numerical_scheme_IDE.
 
     # Path where simulation results (generated with ide_covid_inspired_scenario.cpp) are stored.
     result_dir = os.path.join(os.path.dirname(
-        __file__), "../../..", "data/simulation_results/covid_inspired_scenario/")
+        __file__), "./simulation_results/covid_inspired_scenario/")
 
     # Path where data for contacts is stored.
     contact_data_dir = os.path.join(os.path.dirname(
-        __file__), "../../..", "data/contacts/")
+        __file__), "./build/_deps/memilio-src/data/contacts/")
 
     # Path where reported data is stored.
     reported_data_dir = os.path.join(os.path.dirname(
-        __file__), "../../..", "data/pydata/Germany/")
+        __file__), "./data/Germany/")
 
     # Path where plots will be stored.
     plot_dir = os.path.join(os.path.dirname(
-        __file__), "../../..", "data/plots/covid_inspired_scenario/")
+        __file__), "./plots/covid_inspired_scenario/")
 
     run_and_plot_scenario_with_adjusted_contact_scaling(result_dir, contact_data_dir, reported_data_dir, plot_dir, start_date, simulation_time,
                                                         timestep)

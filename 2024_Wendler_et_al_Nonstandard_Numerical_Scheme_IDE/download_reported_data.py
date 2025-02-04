@@ -27,8 +27,10 @@ from memilio.epidata import getDIVIData
 
 def main():
 
+    # This path is valid if script is executed in e.g.
+    # memilio-simulations/2024_Wendler_et_al_Nonstandard_Numerical_scheme_IDE.
     data_folder = os.path.join(os.path.dirname(
-        __file__), "../../../data/pydata")
+        __file__), "./data")
 
     if not os.path.isdir(data_folder):
         os.makedirs(data_folder)

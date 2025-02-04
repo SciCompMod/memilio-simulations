@@ -513,11 +513,19 @@ mio::IOResult<void> simulate_ode_and_ide(ScalarType t0, ScalarType tmax, ScalarT
     return mio::success();
 }
 
-int main()
+/** 
+* Usage: ide_convergence_rate <result_dir>
+* The command line argument is optional. Default values are provided if not specified.
+*/
+int main(int argc, char** argv)
 {
-    // Directory where results will be stored. If this string is empty, results will not be saved.
-    // Path is valid if file is executed e.g. in memilio/build/bin.
-    std::string result_dir = "../../data/simulation_results/convergence/";
+    // Default path is valid if script is executed in e.g. memilio-simulations/2024_Wendler_et_al_Nonstandard_numerical_scheme_IDE.
+    std::string result_dir = "./simulation_results/convergence/";
+
+    // Set result_dir via command line.
+    if (argc == 2) {
+        result_dir = argv[1];
+    }
 
     // General set up.
     ScalarType t0   = 0.;
