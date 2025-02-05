@@ -562,8 +562,7 @@ int main(int argc, char** argv)
     ScalarType tmax = 45;
 
     // Set paths from command line.
-    if (argc == 3) {
-
+    if (argc == 4) {
         contact_data_dir  = argv[1];
         reported_data_dir = argv[2];
         result_dir        = argv[3];
@@ -575,7 +574,6 @@ int main(int argc, char** argv)
     // from the command line with corresponding arguments as defined here. For more details, see
     // run_and_plot_covid_inspired_scenario.py.
     if (argc == 10) {
-
         contact_data_dir                       = argv[1];
         reported_data_dir                      = argv[2];
         result_dir                             = argv[3];
