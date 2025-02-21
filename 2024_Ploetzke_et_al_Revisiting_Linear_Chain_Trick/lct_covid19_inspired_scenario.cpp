@@ -73,8 +73,9 @@ const ScalarType deathsPerCritical[]              = {0.05, 0.05, 0.14, 0.14, 0.4
 
 // Define default scalings that can be changed via command line.
 ScalarType scale_confirmed_cases = 1.; ///< Scale confirmed case data to incorporate a detection ratio.
-ScalarType scale_contacts = 1.; ///< Scale the contact data so that the simulation results for the number of daily new transmissions align with the extrapolated RKI data (for aggregated age groups).
-ScalarType npi_size       = 0.; ///< Effect on the contacts of the NPI to be implemented from 25/10/2020 on. 
+ScalarType scale_contacts =
+    1.; ///< Scale the contact data so that the simulation results for the number of daily new transmissions align with the extrapolated RKI data (for aggregated age groups).
+ScalarType npi_size = 0.; ///< Effect on the contacts of the NPI to be implemented from 25/10/2020 on.
 
 // Define contact locations, which are used to define the contact matrix and to define location-resolved NPIs.
 /// @brief Indices of contact matrix corresponding to locations where contacts occur.

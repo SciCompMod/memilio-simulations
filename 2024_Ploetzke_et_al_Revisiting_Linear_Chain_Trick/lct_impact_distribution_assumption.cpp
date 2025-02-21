@@ -66,10 +66,14 @@ const ScalarType deathsPerCritical                = 0.21718;
 * @brief Constructs an initial value vector such that the initial infection dynamic is constant.
 *   
 *   The initial value vector is constructed based on a value of approximately 4050 for the daily new transmissions. 
-*   This value is based on some official reporting numbers for Germany. The vector is constructed such that the 
-*   daily new transmissions remain constant if the effective reproduction number is equal to 1. 
+*   This value is based on some official reporting numbers for Germany 
+*   (see Robert Koch-Institut, Täglicher Lagebericht am 15.10.2020,
+*   https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Situationsberichte/Okt_2020/2020-10-15-de.pdf?__blob=publicationFile).
+*   The vector is constructed such that the daily new transmissions remain constant if the effective
+*   reproduction number is equal to 1. 
 *   Derived numbers for compartments are distributed uniformly to the subcompartments.
 *   To define the vector, we assume that individuals behave exactly as defined by the epidemiological parameters 
+*   (that means that they stay exactly the mean stay time in each compartment and that the transition probabilities are accurate) 
 *   and that the new transmissions are constant over time. 
 *   The value for the Recovered compartment is also set according to the reported numbers 
 *   and the number of dead individuals is set to zero.
@@ -83,10 +87,13 @@ std::vector<ScalarType> get_initial_values()
     const ScalarType dailyNewTransmissionsReported = (34.1 / 7) * total_population / 100000;
 
     // Firstly, we calculate an initial value vector without division in subcompartments.
+    // Assume that individuals behave exactly as defined by the epidemiological parameters.
     std::vector<ScalarType> init_compartments((size_t)InfState::Count);
-
+    // If the daily number of new transmissions was constant within the last days and individuals remain exactly
+    // the average time in the Exposed compartment, we currently have timeExposed * dailyNewTransmissionsReported individuals.
     init_compartments[(size_t)InfState::Exposed]            = timeExposed * dailyNewTransmissionsReported;
     init_compartments[(size_t)InfState::InfectedNoSymptoms] = timeInfectedNoSymptoms * dailyNewTransmissionsReported;
+    // Same argument as for exposed but we have to take into account the probability to get symptomatic.
     init_compartments[(size_t)InfState::InfectedSymptoms] =
         (1 - recoveredPerInfectedNoSymptoms) * timeInfectedSymptoms * dailyNewTransmissionsReported;
     init_compartments[(size_t)InfState::InfectedSevere] = (1 - recoveredPerInfectedNoSymptoms) *
@@ -95,8 +102,11 @@ std::vector<ScalarType> get_initial_values()
     init_compartments[(size_t)InfState::InfectedCritical] = (1 - recoveredPerInfectedNoSymptoms) *
                                                             severePerInfectedSymptoms * criticalPerSevere *
                                                             timeInfectedCritical * dailyNewTransmissionsReported;
-    init_compartments[(size_t)InfState::Recovered]   = 275292.;
-    init_compartments[(size_t)InfState::Dead]        = 0.;
+    // Number is from official RKI data as stated above.
+    init_compartments[(size_t)InfState::Recovered] = 275292.;
+    // Set initial Dead compartment to zero for this experiment. This way, we can visualize the new deaths in the simulation time.
+    init_compartments[(size_t)InfState::Dead] = 0.;
+    // Set the number of Susceptibles to the remaining number of people in the population.
     init_compartments[(size_t)InfState::Susceptible] = total_population;
     for (size_t i = (size_t)InfState::Exposed; i < (size_t)InfState::Count; i++) {
         init_compartments[(size_t)InfState::Susceptible] -= init_compartments[i];

@@ -284,7 +284,7 @@ def plot_subcompartments3D(file, num_subcompartments, compartment_idx, first_tim
     plt.close()
 
 
-def plot_peak_daily_new_transmissions(func_get_file_name, Reffs, subcompartments, file_name=""):
+def plot_epidemic_peak_size(func_get_file_name, Reffs, subcompartments, file_name=""):
     """ Creates a plot to visualize the maximal number of daily new transmissions (size of the epidemic peak) 
     for different effective reproduction numbers and different assumptions regarding the number of subcompartments.
 
@@ -302,7 +302,7 @@ def plot_peak_daily_new_transmissions(func_get_file_name, Reffs, subcompartments
     for Reff in Reffs:
         y = np.zeros(len(subcompartments))
         for i in range(len(subcompartments)):
-            y[i] = get_peak_daily_new_transmissions(
+            y[i] = get_epidemic_peak_size(
                 func_get_file_name(Reff=Reff, subcompartment=subcompartments[i]))
         plt.plot(subcompartments, y, 'o-', linewidth=1.2,
                  label=str(Reff))
@@ -321,7 +321,7 @@ def plot_peak_daily_new_transmissions(func_get_file_name, Reffs, subcompartments
     plt.close()
 
 
-def get_peak_daily_new_transmissions(file):
+def get_epidemic_peak_size(file):
     """ Returns the maximum of the daily new transmissions (peak size) of a simulation result.
     @param[in] file: Paths to file (without .h5 extension) containing the simulation result.
     """
@@ -346,7 +346,7 @@ def get_peak_daily_new_transmissions(file):
     return max
 
 
-def plot_day_peak_daily_new_transmissions(func_get_file_name, Reffs, subcompartments, file_name=""):
+def plot_epidemic_peak_timing(func_get_file_name, Reffs, subcompartments, file_name=""):
     """ Creates a plot to visualize the day at which the maximal number of daily new transmissions is reached 
     (timing of the epidemic peak) for different effective reproduction numbers and different assumptions 
     regarding the number of subcompartments.
@@ -364,7 +364,7 @@ def plot_day_peak_daily_new_transmissions(func_get_file_name, Reffs, subcompartm
     for Reff in Reffs:
         y = np.zeros(len(subcompartments))
         for i in range(len(subcompartments)):
-            y[i] = get_day_peak_daily_new_transmissions(
+            y[i] = get_epidemic_peak_timing(
                 func_get_file_name(Reff=Reff, subcompartment=subcompartments[i]))
         plt.plot(subcompartments, y, 'o-', linewidth=1.2,
                  label=str(Reff))
@@ -383,7 +383,7 @@ def plot_day_peak_daily_new_transmissions(func_get_file_name, Reffs, subcompartm
     plt.close()
 
 
-def get_day_peak_daily_new_transmissions(file):
+def get_epidemic_peak_timing(file):
     """ Returns the day at which the maximum number of the daily new transmissions is reached (peak timing)
      of a simulation result.
     @param[in] file: Paths to file (without .h5 extension) containing the simulation result.
@@ -572,25 +572,25 @@ def main():
         folder = os.path.join(result_dir, "riseRefflong")
         Reffs = list(range(2, 11))
         subcompartments = list(range(1, 11))
-        plot_peak_daily_new_transmissions(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
+        plot_epidemic_peak_size(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
                                           Reffs, subcompartments, file_name="compare_peak_size")
-        plot_day_peak_daily_new_transmissions(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
+        plot_epidemic_peak_timing(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
                                               Reffs, subcompartments, file_name="compare_peak_days")
     if 9 in figures:
         folder = os.path.join(result_dir, "riseRefflongTEhalved")
         Reffs = list(range(2, 11))
         subcompartments = list(range(1, 11))
-        plot_peak_daily_new_transmissions(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
+        plot_epidemic_peak_size(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
                                           Reffs, subcompartments, file_name="compare_peak_size_TEhalved")
-        plot_day_peak_daily_new_transmissions(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
+        plot_epidemic_peak_timing(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
                                               Reffs, subcompartments, file_name="compare_peak_days_TEhalved")
     if 10 in figures:
         folder = os.path.join(result_dir, "riseRefflongTEdoubled")
         Reffs = list(range(2, 11))
         subcompartments = list(range(1, 11))
-        plot_peak_daily_new_transmissions(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
+        plot_epidemic_peak_size(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
                                           Reffs, subcompartments, file_name="compare_peak_size_TEdoubled")
-        plot_day_peak_daily_new_transmissions(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
+        plot_epidemic_peak_timing(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
                                               Reffs, subcompartments, file_name="compare_peak_days_TEdoubled")
     if 11 in figures:
         folder = os.path.join(result_dir, "riseRefflong")

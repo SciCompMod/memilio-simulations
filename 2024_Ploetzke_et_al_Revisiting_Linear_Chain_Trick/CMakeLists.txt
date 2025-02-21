@@ -27,7 +27,7 @@ FetchContent_MakeAvailable(memilio)
 set(MEMILIO_BUILD_TESTS OFF)
 set(MEMILIO_BUILD_EXAMPLES OFF)
 set(MEMILIO_BUILD_SIMULATIONS OFF)
-set(MEMILIO_ENABLE_OPENM OFF)
+set(MEMILIO_ENABLE_OPENMP OFF)
 
 # Add the subdirectory for MEmilio build.
 add_subdirectory(${memilio_SOURCE_DIR}/cpp ${memilio_BINARY_DIR})

@@ -34,19 +34,9 @@ def main():
         os.makedirs(data_folder)
 
     # Download data in format required.
-    getCaseData.get_case_data(read_data=False,
-                              file_format=dd.defaultDict['file_format'],
-                              out_folder=data_folder,
-                              no_raw=False,
-                              start_date=date(2020, 1, 1),
-                              end_date=date(2020, 12, 31),
-                              impute_dates=True,
-                              moving_average=0,
-                              make_plot=dd.defaultDict['make_plot'],
-                              split_berlin=dd.defaultDict['split_berlin'],
-                              rep_date=dd.defaultDict['rep_date'],
-                              files='All'
-                              )
+    # We use data with a moving average to initialize the models in lct_covid19_inspired_scenario.cpp. 
+    # This way, e.g., weekend effects does not affect the initialization. 
+    # For simulations, it is reasonable to smooth the data.
     getCaseData.get_case_data(read_data=False,
                               file_format=dd.defaultDict['file_format'],
                               out_folder=data_folder,
@@ -60,6 +50,22 @@ def main():
                               rep_date=dd.defaultDict['rep_date'],
                               files='All'
                               )
+    # Infection data without moving average are used for visualization purposes. 
+    # Here we want to highlight that the data fluctuates, so we use non-smoothed data.  
+    getCaseData.get_case_data(read_data=False,
+                              file_format=dd.defaultDict['file_format'],
+                              out_folder=data_folder,
+                              no_raw=False,
+                              start_date=date(2020, 1, 1),
+                              end_date=date(2020, 12, 31),
+                              impute_dates=True,
+                              moving_average=0,
+                              make_plot=dd.defaultDict['make_plot'],
+                              split_berlin=dd.defaultDict['split_berlin'],
+                              rep_date=dd.defaultDict['rep_date'],
+                              files='All'
+                              )
+    # Divi data are not used with moving average as they are only used for scaling and visualization.
     getDIVIData.get_divi_data(read_data=False,
                               file_format=dd.defaultDict['file_format'],
                               out_folder=data_folder,

@@ -71,9 +71,9 @@ const ScalarType deathsPerCritical[]              = {0.05, 0.05, 0.14, 0.14, 0.4
 * @brief Function to transform an age-resolved simulation result into a result without age resolution.
 *
 * Sums up the values in the age groups to transform the simulation result into a result without age resolution. 
-* For the sake of comparability, we use non-age-resolved results for visualizations.
+* To provide a clear overview, we use non-age-resolved results for visualizations.
 * This implementation is only valid if the simulation is run with equal LctStates for all groups or if the result 
-* does not contain any subcompartments.
+* does not contain any subcompartments (e.g. due to previous accumulation of the subcompartments into compartments).
 *   
 * @param[in] ageresolved_result TimeSeries with an age-resolved simulation result.
 * @returns TimeSeries with the result where the values of the age groups are summed up.
@@ -84,7 +84,7 @@ mio::TimeSeries<ScalarType> sum_age_groups(const mio::TimeSeries<ScalarType> age
     size_t infstatecount = size_t((ScalarType)ageresolved_result.get_num_elements() / (ScalarType)num_groups);
     mio::TimeSeries<ScalarType> nonageresolved_result(infstatecount);
 
-    // For each time point, calculate the result without age resolution and add the time point
+    // For each time point, accumulate the age-resolved result and add the time point
     // to the non-age-resolved result.
     for (Eigen::Index timepoint = 0; timepoint < ageresolved_result.get_num_time_points(); ++timepoint) {
         Eigen::VectorX<ScalarType> result = Eigen::VectorX<ScalarType>::Zero(infstatecount);
