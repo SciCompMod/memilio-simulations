@@ -143,7 +143,7 @@ mio::IOResult<mio::UncertainContactMatrix<ScalarType>> get_contact_matrix(std::s
 /** 
 * @brief Constructs an initial value vector with 100 Exposed individuals and remaining population in Susceptible.
 *   
-* The function constructs a vector of vectors with one vector for each age group. For each age group, 
+* The function constructs a vector of vectors where each vector corresponds to an age group. For each age group, 
 * the vector contains initial values for each compartment (without resolution in subcompartments).
 * If resolve_by_age is true, the initial number of Exposed individuals in age group agegroup_exposed is set to 100. 
 * If resolve_by_age is false, an initial value vector without age resolution is created with 100 Exposed individuals.
@@ -183,7 +183,7 @@ std::vector<std::vector<ScalarType>> get_initialization(bool resolve_by_age = fa
 *
 *   The simulation uses LCT models with Covid-19 inspired parameters and a contact rate for Germany. 
 *   The simulation is performed with 100 initially Exposed individuals in age group agegroup_exposed. 
-*   The remaining compartment sizes are set to zero and the number of Susceptibles is set accordingly.
+*   The remaining compartment sizes are set to zero and the number of Susceptibles is set accordingly using the total population .
 *   The idea is that all settings for agegroup_exposed are translated into the same setting if we use a model 
 *   without age resolution. 
 *   Therefore, by comparing different settings for agegroup_exposed, we can assess the impact of age resolution.
@@ -233,7 +233,7 @@ mio::IOResult<void> simulation_with_ageresolution(size_t agegroup_exposed, Scala
 
     auto init = get_initialization(true, agegroup_exposed);
     // Use init as a basis to define appropriate initial values.
-    // Compartment values are distributed equally to subcompartments.
+    // Compartment values are distributed uniformly to the subcompartments.
     for (size_t group = 0; group < num_groups; group++) {
         model.populations[group * LctState::Count + 0]                   = init[group][0]; // Susceptible
         model.populations[group * LctState::Count + LctState::Count - 2] = init[group][6]; // Recovered
@@ -279,7 +279,7 @@ mio::IOResult<void> simulation_with_ageresolution(size_t agegroup_exposed, Scala
 * @param[in] tmax End time of the simulation.
 * @param[in] contact_data_dir Directory to the contact data.
 * @param[in] save_dir Specifies the directory where the results should be stored. 
-*   Provide an empty string if the results should not be saved.
+*   Default is an empty string in which case the results are not saved.
 * @returns Any io errors that happen during saving the results.
 */
 mio::IOResult<void> simulation_without_ageresolution(ScalarType tmax, std::string contact_data_dir,

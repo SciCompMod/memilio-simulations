@@ -381,7 +381,7 @@ def plot_daily_new_transmissions(files, datafile, start_date, tmax, scale_confir
     plt.figure(file_name)
 
     data_rki = load_rki_data(datafile, start_date, tmax, scale_confirmed_cases)
-    num_days = tmax+1
+    num_days = tmax + 1
 
     if (age_group == -1):
         # Non-age-resolved.
@@ -456,10 +456,10 @@ def plot_daily_new_transmissions(files, datafile, start_date, tmax, scale_confir
 
 def get_file_name(data_dir, start_date, num_subcompartments, boolageresolved=False):
     """ Gives a paths to a file with the simulation results for an LCT model with num_subcompartments subcompartments, 
-    for an covid19 inspired scenario starting at start_date.
-    This function uses standard defined naming convention of the lct covid19 inspired simulations.
+    for a Covid-19 inspired scenario starting at start_date.
+    This function uses standard defined naming convention of the LCT Covid-19 inspired simulations.
 
-    @param[in] data_dir: Data directory pointing to the folder where the simulation result file lies in. 
+    @param[in] data_dir: Data directory pointing to the folder where the simulation result file is stored in. 
     @param[in] start_date: Start date of the simulation result.
     @param[in] num_subcompartments: Number of subcompartments for the LCT model used to obtain the simulation results.
     @param[in] boolageresolved: Specifies whether the result should be resolved by age (or accumulated results). 

@@ -68,13 +68,13 @@ const ScalarType deathsPerCritical                = 0.21718;
 *   The initial value vector is constructed based on a value of approximately 4050 for the daily new transmissions. 
 *   This value is based on some official reporting numbers for Germany. The vector is constructed such that the 
 *   daily new transmissions remain constant if the effective reproduction number is equal to 1. 
-*   Derived numbers for compartments are distributed equally to the subcompartments.
+*   Derived numbers for compartments are distributed uniformly to the subcompartments.
 *   To define the vector, we assume that individuals behave exactly as defined by the epidemiological parameters 
 *   and that the new transmissions are constant over time. 
 *   The value for the Recovered compartment is also set according to the reported numbers 
-*   and the number of death is set to zero.
+*   and the number of dead individuals is set to zero.
 *   
-* @returns The initial value vector with subcompartments constructed.
+* @returns The initial value vector including subcompartments.
 */
 std::vector<ScalarType> get_initial_values()
 {
@@ -103,7 +103,7 @@ std::vector<ScalarType> get_initial_values()
     }
 
     // Now, we construct an initial value vector with division in subcompartments.
-    // Compartment sizes are distributed equally to the subcompartments.
+    // Compartment sizes are distributed uniformly to the subcompartments.
     std::vector<ScalarType> initial_value_vector;
     initial_value_vector.push_back(init_compartments[(size_t)InfState::Susceptible]);
     for (size_t i = 0; i < num_subcompartments; i++) {

@@ -196,11 +196,11 @@ def plot_single_compartment(files, legend_labels,  compartment_idx=1, file_name=
 
 def plot_subcompartments3D(file, num_subcompartments, compartment_idx, first_time_idx, file_name=""):
     """ Creates a 3d plot visualizing the distribution of people in the subcompartments over time 
-    (starting from first_time_idx) of one simulation result and one one specific compartment. 
+    (starting from first_time_idx) of one simulation result and one specific compartment. 
 
     @param[in] file: Paths to file (without .h5 extension) containing the simulation result to be plotted.
         The result should contain a splitting in subcompartments. The function assumes that each of the compartments
-         use the same number of subcompartments num_subcompartments.
+         uses the same number of subcompartments num_subcompartments.
         To make the plot clearer, the time steps provided should not be too small (e.g. days).
     @param[in] num_subcompartments: Number of subcompartments used for the LCT model in the simulation.
     @param[in] compartment_idx: The index of the compartment to be plotted.
@@ -224,7 +224,7 @@ def plot_subcompartments3D(file, num_subcompartments, compartment_idx, first_tim
     dates = data['Time'][:]
     # As there should be only one Group, total is the simulation result.
     total = data['Total'][:, :]
-    # Assume, that each of the compartments use the same number of subcompartments num_subcompartments.
+    # Assume, that each of the compartments uses the same number of subcompartments num_subcompartments.
     first_idx_comp = 1+(compartment_idx-1)*num_subcompartments
 
     # Create data.
@@ -297,7 +297,7 @@ def plot_peak_daily_new_transmissions(func_get_file_name, Reffs, subcompartments
     """
     fig = plt.figure()
 
-    # For each Reff, get the peak size for each number of subcompartments and plot the result in dependence of
+    # For each Reff, get the peak size for each number of subcompartments and plot the result depending on
     # the subcompartment numbers.
     for Reff in Reffs:
         y = np.zeros(len(subcompartments))
@@ -351,7 +351,7 @@ def plot_day_peak_daily_new_transmissions(func_get_file_name, Reffs, subcompartm
     (timing of the epidemic peak) for different effective reproduction numbers and different assumptions 
     regarding the number of subcompartments.
 
-    @param[in] func_get_file_name: Function that returns the paths to a file with suitable simulation results
+    @param[in] func_get_file_name: Function that returns the path to the files with suitable simulation results
         using the parameters "Reff" and "subcompartment".
     @param[in] Reffs: List with the effective reproduction number for which the peak timing should be compared.
     @param[in] subcompartments: List with the subcompartment numbers for which the peak timing should be compared.
@@ -471,7 +471,7 @@ def plot_daily_new_transmissions(files, legend_labels, file_name="", tmax=0):
 def get_file_name(result_dir, Reff, num_subcompartments, boolsubcomp=False):
     """ Gives a paths to a file with the simulation results for an LCT model with num_subcompartments subcompartments, 
     where the effective reproduction number is set to Reff at simulation time 2.
-    This uses standard defined naming convention of the lct simulations.
+    This uses standard defined naming convention of the LCT simulations.
 
     @param[in] result_dir: Directory pointing to the folder where the simulation result file lies in. 
     @param[in] Reff: Effective reproduction number at simulation time 2 of the simulation result.
@@ -498,7 +498,7 @@ def main():
     result_dir = os.path.join(os.path.dirname(
         __file__), "simulation_results", "simulation_lct_numerical_experiments")
 
-    # Define which figures of the paper should be created. Figure 12 is created with another pyton script.
+    # Define which figures of the paper should be created. Figure 12 is created with another python script.
     figures = list(range(3, 12)) + [13]
 
     if 3 in figures:

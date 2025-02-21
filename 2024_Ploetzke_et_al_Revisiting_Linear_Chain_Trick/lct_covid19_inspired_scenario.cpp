@@ -71,12 +71,10 @@ const ScalarType severePerInfectedSymptoms[]      = {0.0075, 0.0075, 0.019, 0.06
 const ScalarType criticalPerSevere[]              = {0.075, 0.075, 0.075, 0.15, 0.3, 0.4};
 const ScalarType deathsPerCritical[]              = {0.05, 0.05, 0.14, 0.14, 0.4, 0.6};
 
-// Define scalings that can be changed via command line.
+// Define default scalings that can be changed via command line.
 ScalarType scale_confirmed_cases = 1.; ///< Scale confirmed case data to incorporate a detection ratio.
-// Scale the contact data so that the simulation results for the number of daily new transmissions align with the
-// extrapolated RKI data (for aggregated age groups).
-ScalarType scale_contacts = 1.;
-ScalarType npi_size       = 0.; ///< Size of the NPI to be implemented from 25/20/2020.
+ScalarType scale_contacts = 1.; ///< Scale the contact data so that the simulation results for the number of daily new transmissions align with the extrapolated RKI data (for aggregated age groups).
+ScalarType npi_size       = 0.; ///< Effect on the contacts of the NPI to be implemented from 25/10/2020 on. 
 
 // Define contact locations, which are used to define the contact matrix and to define location-resolved NPIs.
 /// @brief Indices of contact matrix corresponding to locations where contacts occur.
@@ -101,7 +99,7 @@ static const std::map<ContactLocation, std::string> contact_locations = {{Contac
 * Sums up the values in the age groups to transform the simulation result into a result without age resolution. 
 * To provide a clear overview, we use non-age-resolved results for visualizations.
 * This implementation is only valid if the simulation is run with equal LctStates for all groups or if the result 
-* does not contain any subcompartments.
+* does not contain any subcompartments (e.g. due to previous accumulation of the subcompartments into compartments).
 *   
 * @param[in] ageresolved_result TimeSeries with an age-resolved simulation result.
 * @returns TimeSeries with the result where the values of the age groups are summed up.
@@ -112,7 +110,7 @@ mio::TimeSeries<ScalarType> sum_age_groups(const mio::TimeSeries<ScalarType> age
     size_t infstatecount = size_t((ScalarType)ageresolved_result.get_num_elements() / (ScalarType)num_groups);
     mio::TimeSeries<ScalarType> nonageresolved_result(infstatecount);
 
-    // For each time point, calculate the result without age resolution and add the time point
+    // For each time point, accumulate the age-resolved result and add the time point
     // to the non-age-resolved result.
     for (Eigen::Index timepoint = 0; timepoint < ageresolved_result.get_num_time_points(); ++timepoint) {
         Eigen::VectorX<ScalarType> result = Eigen::VectorX<ScalarType>::Zero(infstatecount);
@@ -151,10 +149,10 @@ void set_npi_october(mio::ContactMatrixGroup& contact_matrices)
  * The contacts are set using contact matrices from files in the data directory for different locations.
  * Non-pharmaceutical interventions (NPIs) influencing the ContactPatterns are set.
  * The contact matrices are scaled using the parameter scale_contacts such that the simulation results for the number
- *  of daily new transmissions align with the extrapolated RKI data.
+ *  of daily new transmissions aligns with the extrapolated RKI data.
  * 
  * @param[in] contact_data_dir Directory to files with minimum and baseline contact matrices.
- * @returns Any io errors that happen during reading of the input files.
+ * @returns The contact matrix or any io errors that happen during reading of the input files.
  */
 mio::IOResult<mio::UncertainContactMatrix<ScalarType>> get_contact_matrix(std::string contact_data_dir)
 {
@@ -190,7 +188,7 @@ mio::IOResult<mio::UncertainContactMatrix<ScalarType>> get_contact_matrix(std::s
  *   The LCT model is constructed with NUM_SUBCOMPARTMENT subcompartments for all compartments where subcompartments 
  *   make sense (so all except Susceptibles, Recovered and Dead) for all age groups.
  *   If NUM_SUBCOMPARTMENTS is set to zero, an LCT model is used with numbers of subcompartments such that 
- *   each corresponds to the approximate stay time in the compartment.
+ *   the number of subcompartments corresponds to the approximate stay time in the compartment.
  *
  * @param[in] contact_data_dir Directory to the contact data.
  * @param[in] infection_data_dir Directory to infection data provided by the RKI for Germany.
@@ -208,7 +206,7 @@ mio::IOResult<void> simulate(std::string const& contact_data_dir, std::string co
     using InfState = mio::lsecir::InfectionState;
     // Define appropriate LCT model type: 1.) An LCT model with NUM_SUBCOMPARTMENTS subcompartments for all compartments
     // and age groups if NUM_SUBCOMPOARTMENTS if greater than zero or 2.) if the value is zero, an LCT model
-    // with numbers of subcompartments such that each corresponds to the approximate stay time in the compartment.
+    // with numbers of subcompartments such that this number corresponds to the approximate stay time in the compartment.
     // For 1.) : Define single LctState.
     // If NUM_SUBCOMPOARTMENTS=0, define LctState as a random other LctInfectionState as the template
     // arguments for LctInfectionState have to be greater than zero.
@@ -319,15 +317,15 @@ mio::IOResult<void> simulate(std::string const& contact_data_dir, std::string co
 *   - <scale_contacts> (double): Scale confirmed case data to incorporate a detection ratio.
 *   - <scale_confirmed_cases> (double): Scale the contact data so that the simulation results for the number of daily new transmissions align with the 
 *       extrapolated RKI data (for aggregated age groups).
-*   - <npi_size> (double): Size of the NPI to be implemented from 25/20/2020. 0 means no NPIs, 1 means no contacts.
+*   - <npi_size> (double): Effect of the NPI to be implemented from 25/10/2020 on, sensible values lie between 0 and 1 where 0 means no NPI and 1 means no contacts.
 *   
 *   All command line arguments are optional but it is beneficial to specify at least the first argument <data_dir> 
-*   as the default is just an educated guess.
+*   as the default is just an educated guess and save_dir as results will not be saved otherwise.
 *
 *   The numbers of subcompartments used in the LCT model is determined by the preprocessor macro NUM_SUBCOMPARTMENTS.
 *   You can set the number via the flag -DNUM_SUBCOMPARTMENTS=... . 
 *   If NUM_SUBCOMPARTMENTS is set to zero, an LCT model is used with numbers of subcompartments such that 
-*   each corresponds to the approximate stay time in the compartment.
+*   this number corresponds to the approximate stay time in the compartment.
 */
 int main(int argc, char** argv)
 {

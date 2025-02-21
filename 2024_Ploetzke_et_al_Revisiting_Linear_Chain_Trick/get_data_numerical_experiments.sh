@@ -72,7 +72,7 @@ done
 
 # Fifth case: Increase the effective reproduction number at simulation day 2 to different values and 
 # simulate for 200 days to compare epidemic peaks.
-# Also perform simulations with TimeExposed scaled by 0.5 or 2.
+# Also perform simulations with TimeExposed scaled with 0.5 or 2.
 # Define and construct relevant folders.
 subdir_riseRefflong="$result_dir/riseRefflong/"
 if [ ! -d "$subdir_riseRefflong" ]; then

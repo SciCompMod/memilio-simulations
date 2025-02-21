@@ -99,7 +99,7 @@ def plot_runtime(json_file, file_name=''):
 
 
 def plot_runtime_and_steps(json_file, file_name=''):
-    """ Creates a plot with two y-axis: One for the run time measurements and one for the required number of time steps
+    """ Creates a plot with two y-axes: One for the run time measurements and one for the required number of time steps
     for models with different assumptions regarding the number of subcompartments.
 
     @param[in] json_file: Path to the json file containing run time measurements and the time steps for models with 
