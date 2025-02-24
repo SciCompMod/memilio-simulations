@@ -8,6 +8,7 @@ endif()
 option(BUILD_2021_Kuehn_et_al_Assessment "Build simulations from folder 2021_Kuehn_et_al_Assessment_NPIs_Spatial." OFF)
 option(BUILD_2022_Koslow_et_al_Appropriate "Build simulations from folder 2022_Koslow_et_al_Appropriate_Relaxation_NPIs." OFF)
 option(BUILD_2024_Ploetzke_et_al_Revisiting "Build simulations from folder 2024_Ploetzke_et_al_Revisiting_Linear_Chain_Trick." OFF)
+option(BUILD_2024_Wendler_et_al_Nonstandard "Build simulations from folder 2024_Wendler_et_al_Nonstandard_Numerical_Scheme_IDE." OFF)
 option(BUILD_munich_graph_sim "Build simulations from folder munich_graph_sim." OFF)
 
 # We require the library hdf5 for all targets.
