@@ -35,7 +35,7 @@ def main():
 
     # Download data in format required.
     # We use data with a moving average to initialize the models in lct_covid19_inspired_scenario.cpp. 
-    # This way, e.g., weekend effects does not affect the initialization. 
+    # This way, e.g., weekend effects do not affect the initialization. 
     # For simulations, it is reasonable to smooth the data.
     getCaseData.get_case_data(read_data=False,
                               file_format=dd.defaultDict['file_format'],

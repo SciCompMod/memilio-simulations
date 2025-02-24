@@ -89,11 +89,11 @@ std::vector<ScalarType> get_initial_values()
     // Firstly, we calculate an initial value vector without division in subcompartments.
     // Assume that individuals behave exactly as defined by the epidemiological parameters.
     std::vector<ScalarType> init_compartments((size_t)InfState::Count);
-    // If the daily number of new transmissions was constant within the last days and individuals remain exactly
+    // If the number of daily new transmissions was constant within the last days and individuals remain exactly
     // the average time in the Exposed compartment, we currently have timeExposed * dailyNewTransmissionsReported individuals.
     init_compartments[(size_t)InfState::Exposed]            = timeExposed * dailyNewTransmissionsReported;
     init_compartments[(size_t)InfState::InfectedNoSymptoms] = timeInfectedNoSymptoms * dailyNewTransmissionsReported;
-    // Same argument as for exposed but we have to take into account the probability to get symptomatic.
+    // Same argument as for Exposed but we have to take into account the probability to become symptomatic.
     init_compartments[(size_t)InfState::InfectedSymptoms] =
         (1 - recoveredPerInfectedNoSymptoms) * timeInfectedSymptoms * dailyNewTransmissionsReported;
     init_compartments[(size_t)InfState::InfectedSevere] = (1 - recoveredPerInfectedNoSymptoms) *
