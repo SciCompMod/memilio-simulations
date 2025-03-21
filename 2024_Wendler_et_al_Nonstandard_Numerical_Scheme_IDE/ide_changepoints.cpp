@@ -35,6 +35,7 @@
 #include "ode_secir/parameters.h"
 
 #include "boost/numeric/odeint/stepper/runge_kutta_cash_karp54.hpp"
+#include "boost/filesystem.hpp"
 #include <string>
 #include <map>
 

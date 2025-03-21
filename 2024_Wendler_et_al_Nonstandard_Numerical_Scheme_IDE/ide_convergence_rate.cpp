@@ -527,6 +527,10 @@ int main(int argc, char** argv)
         result_dir = argv[1];
     }
 
+    // Make folder if not existent yet.
+    boost::filesystem::path dir(result_dir);
+    boost::filesystem::create_directories(dir);
+
     // General set up.
     ScalarType t0   = 0.;
     ScalarType tmax = 70.;

@@ -91,7 +91,8 @@ Finally, create compilation targets for the `.cpp`-files, and link all required 
 - In the global `CMakeLists.txt`, add an option `BUILD_<Year>_<FirstAuthor>_et_al_<FirstWordTitle>` for your new content and the commands to build your files using the local `CMakeLists.txt` and set the default option to `OFF`:
 ```bash
 option(BUILD_<Year>_<FirstAuthor>_et_al_<FirstWordTitle> "Build simulations from folder <FolderName>." OFF)
-
+```
+```bash
 if(BUILD_<Year>_<FirstAuthor>_et_al_<FirstWordTitle>)
   if(NOT EXISTS "${CMAKE_SOURCE_DIR}/<FolderName>/build")
     execute_process(COMMAND mkdir "build/" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/<FolderName>")

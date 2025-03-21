@@ -61,19 +61,20 @@ def get_weighted_mean(prob_1, stay_time_1, stay_time_2):
 
 def main():
     shape, scale = get_lognormal_parameters(2.183, 1.052)
-    print(f"{shape:.12f}", f"{scale:.12f}")
+    print(
+        f"For the given mean and standard deviation, the shape parameter is {shape:.12f} and the scale parameter is {scale:.12f}.")
 
     weighted_mean = get_weighted_mean(0.793099, 1.1, 8.0)
-    print(f"{weighted_mean:.6f}")
+    print(f"The weighted mean is {weighted_mean:.6f}.")
 
     weighted_mean = get_weighted_mean(0.078643, 6.6, 8.0)
-    print(f"{weighted_mean:.6f}")
+    print(f"The weighted mean is {weighted_mean:.6f}.")
 
     weighted_mean = get_weighted_mean(0.173176, 1.5, 18.1)
-    print(f"{weighted_mean:.6f}")
+    print(f"The weighted mean is {weighted_mean:.6f}.")
 
     weighted_mean = get_weighted_mean(0.387803, 10.7, 18.1)
-    print(f"{weighted_mean:.6f}")
+    print(f"The weighted mean is {weighted_mean:.6f}.")
 
 
 if __name__ == '__main__':
