@@ -92,7 +92,8 @@ Finally, create compilation targets for the `.cpp`-files, and link all required 
 ```bash
 option(BUILD_<Year>_<FirstAuthor>_et_al_<FirstWordTitle> "Build simulations from folder <FolderName>." OFF)
 ```
-- Additionally, add the commands to build your files using the local `CMakeLists.txt`: 
+Please also add the option to the current `README.md`. 
+- Additionally, in the global `CMakeLists.txt`, add the commands to build your files using the local `CMakeLists.txt`: 
 ```bash
 if(BUILD_<Year>_<FirstAuthor>_et_al_<FirstWordTitle>)
   if(NOT EXISTS "${CMAKE_SOURCE_DIR}/<FolderName>/build")
@@ -102,5 +103,5 @@ if(BUILD_<Year>_<FirstAuthor>_et_al_<FirstWordTitle>)
   execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/<FolderName>/build")
 endif()
 ```
-Please also add the option to the current `README.md`. 
-- Clearly state all requirements in your `README.md` (e.g. hdf5) as we cannot access the MEmilio variables MEMILIO_HAS... to control the requirements in CMake.
+
+- Clearly state all requirements in your local `README.md` (e.g. hdf5) as we cannot access the MEmilio variables MEMILIO_HAS... to control the requirements in CMake.
