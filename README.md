@@ -92,7 +92,7 @@ Finally, create compilation targets for the `.cpp`-files, and link all required 
 ```bash
 option(BUILD_<Year>_<FirstAuthor>_et_al_<FirstWordTitle> "Build simulations from folder <FolderName>." OFF)
 ```
-Please also add the option to the current `README.md`. 
+    Please also add the option to the current `README.md`. 
 
 - Additionally, in the global `CMakeLists.txt`, add the commands to build your files using the local `CMakeLists.txt`: 
 ```bash
