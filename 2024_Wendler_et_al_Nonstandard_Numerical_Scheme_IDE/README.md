@@ -4,7 +4,7 @@ In this directory you find all files related to the paper
 - _Anna Wendler, Lena Plötzke, Hannah Tritzschak, Martin J. Kühn (2024). A nonstandard numerical scheme for a novel SECIR integro-differential equation-based model allowing nonexponentially distributed stay times._ 
 https://doi.org/10.48550/arXiv.2412.09140.
 
-In the provided scripts, we set paths to determine where results will be saved to or where data is read from. These paths can be adapted either in the command line or the main function. The default values are valid if the scripts (both cpp and python) are executed in the folder `2024_Wendler_et_al_Nonstandard_Numerical_Scheme`. There, simulations can be run with e.g.
+In the provided scripts, we set paths to determine where results will be saved to or where data is read from. These paths can be adapted either in the command line or the main function. The respective folders will be automatically created if not already existent. The default paths are valid if the scripts (both cpp and python) are executed in the folder `2024_Wendler_et_al_Nonstandard_Numerical_Scheme`. There, simulations can be run with e.g.
 ```bash
 ./build/bin/ide_convergence_rate
 ```
