@@ -57,6 +57,7 @@ const ScalarType seasonality              = 0.;
 ScalarType relativeTransmissionNoSymptoms = 1.;
 ScalarType riskOfInfectionFromSymptomatic = 0.3;
 const ScalarType age_group_sizes[]        = {3969138.0, 7508662, 18921292, 28666166, 18153339, 5936434};
+const ScalarType total_population         = 83155031.0;
 
 const ScalarType transmissionProbabilityOnContact[] = {0.03, 0.06, 0.06, 0.06, 0.09, 0.175};
 
@@ -126,6 +127,19 @@ mio::TimeSeries<ScalarType> sum_age_groups(const mio::TimeSeries<ScalarType> age
     return nonageresolved_result;
 }
 
+void print_average_contacts(mio::UncertainContactMatrix<ScalarType> contact_matrix, ScalarType time)
+{
+    using namespace params;
+    ScalarType average = 0.;
+    for (size_t i = 0; i < num_groups; i++) {
+        for (size_t j = 0; j < num_groups; j++) {
+            // Calculate a weighted average according to the age group sizes.
+            average +=
+                age_group_sizes[i] / total_population * contact_matrix.get_cont_freq_mat().get_matrix_at(time)(i, j);
+        }
+    }
+    std::cout << "The average number of contacts on simulation day " << time << " is " << average << std::endl;
+}
 /**
  * @brief Add NPIs to a given contact matrix from 25/10/2020 onwards.
  *
@@ -291,6 +305,10 @@ mio::IOResult<void> simulate(std::string const& contact_data_dir, std::string co
             return save_result_status;
         }
     }
+    print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 1);
+    print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 5);
+    print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 30);
+    print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 40);
     // Print the predicted number of daily new transmissions at the start of the simulation.
     // Could be used to compare the result with the extrapolated reported data and, afterwards, to scale the
     // contacts using the variable scale_contacts.

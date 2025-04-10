@@ -35,42 +35,48 @@ if [ ! -d "$subdir_riseReffTo2shortTEhalved" ]; then
 fi
 
 # Compile with the different numbers of subcompartments and run with different setups.
-for num_subcomp in 1 3 10 50
+for num_subcomp in 0 1 3 10 50
 do
     cmake -DNUM_SUBCOMPARTMENTS=$num_subcomp -DCMAKE_BUILD_TYPE="Release" .
     cmake --build . --target lct_impact_distribution_assumption
 
     # First case: Decrease the effective reproduction number at simulation day 2 to 0.5 and simulate for 12 days.
-    Reff2=0.5
+    Reff=0.5
+    tReff=2.
     simulation_days=12
-    ./bin/lct_impact_distribution_assumption $Reff2 $simulation_days $subdir_dropReff
+    ./bin/lct_impact_distribution_assumption $Reff $tReff $simulation_days $subdir_dropReff
 
     # Second case: Increase the effective reproduction number at simulation day 2 to 2 and simulate for 12 days.
-    Reff2=2.
+    Reff=2.
+    tReff=2.
     simulation_days=12
     # Additionally save result with division in subcompartments.
     if [ "$num_subcomp" -eq 10 ] || [ "$num_subcomp" -eq 50 ]; then
-        ./bin/lct_impact_distribution_assumption $Reff2 $simulation_days $subdir_riseReffTo2short 1
+        ./bin/lct_impact_distribution_assumption $Reff $tReff $simulation_days $subdir_riseReffTo2short 1
     fi
-    ./bin/lct_impact_distribution_assumption $Reff2 $simulation_days $subdir_riseReffTo2short
+    ./bin/lct_impact_distribution_assumption $Reff $tReff $simulation_days $subdir_riseReffTo2short
 
-    # Third case: Second case but with TimeExposed scaled by 0.5.
-    scale_TimeExposed=0.5
-    # Additionally save result with division in subcompartments.
-    if [ "$num_subcomp" -eq 50 ]; then
-        ./bin/lct_impact_distribution_assumption $Reff2 $simulation_days $subdir_riseReffTo2shortTEhalved 1 $scale_TimeExposed
+    # Third case: Second case but with TimeExposed scaled by 0.5. Exclude Lct Var.
+    if [ "$num_subcomp" -ne 0 ]; then 
+        scale_TimeExposed=0.5
+        tReff=2.
+        # Additionally save result with division in subcompartments.
+        if [ "$num_subcomp" -eq 50 ]; then
+            ./bin/lct_impact_distribution_assumption $Reff $tReff $simulation_days $subdir_riseReffTo2shortTEhalved 1 $scale_TimeExposed
+        fi
+        ./bin/lct_impact_distribution_assumption $Reff $tReff $simulation_days $subdir_riseReffTo2shortTEhalved 0 $scale_TimeExposed
     fi
-    ./bin/lct_impact_distribution_assumption $Reff2 $simulation_days $subdir_riseReffTo2shortTEhalved 0 $scale_TimeExposed
 
     # Fourth case: Print final sizes without saving results.
     simulation_days=500
-    ./bin/lct_impact_distribution_assumption 2 $simulation_days "" 0 1.0 1
-    ./bin/lct_impact_distribution_assumption 4 $simulation_days "" 0 1.0 1
-    ./bin/lct_impact_distribution_assumption 10 $simulation_days "" 0 1.0 1
+    tReff=0.
+    ./bin/lct_impact_distribution_assumption 2 $tReff $simulation_days "" 0 1.0 1
+    ./bin/lct_impact_distribution_assumption 4 $tReff $simulation_days "" 0 1.0 1
+    ./bin/lct_impact_distribution_assumption 10 $tReff $simulation_days "" 0 1.0 1
 done
 
 
-# Fifth case: Increase the effective reproduction number at simulation day 2 to different values and 
+# Fifth case: Increase the effective reproduction number at simulation day 0 to different values and 
 # simulate for 200 days to compare epidemic peaks.
 # Also perform simulations with TimeExposed scaled with 0.5 or 2.
 # Define and construct relevant folders.
@@ -87,16 +93,19 @@ if [ ! -d "$subdir_riseRefflongTEdoubled" ]; then
     mkdir "$subdir_riseRefflongTEdoubled"
 fi
 simulationdays=200
-Reff2s=(2 3 4 5 6 7 8 9 10)
-for num_subcomp in 1 2 3 4 5 6 7 8 9 10 50
+Reffs=(2 3 4 5 6 7 8 9 10)
+tReff=0.
+for num_subcomp in 0 1 2 3 4 5 6 7 8 9 10 50
 do
     cmake -DNUM_SUBCOMPARTMENTS=$num_subcomp -DCMAKE_BUILD_TYPE="Release" .
     cmake --build . --target lct_impact_distribution_assumption
     for index in {0..8}
     do
-        ./bin/lct_impact_distribution_assumption ${Reff2s[index]} ${simulationdays} $subdir_riseRefflong
-        ./bin/lct_impact_distribution_assumption ${Reff2s[index]} ${simulationdays} $subdir_riseRefflongTEhalved 0 0.5
-        ./bin/lct_impact_distribution_assumption ${Reff2s[index]} ${simulationdays} $subdir_riseRefflongTEdoubled 0 2.0
+        ./bin/lct_impact_distribution_assumption ${Reffs[index]} $tReff ${simulationdays} $subdir_riseRefflong
+        if [ "$num_subcomp" -ne 0 ]; then 
+            ./bin/lct_impact_distribution_assumption ${Reffs[index]} $tReff ${simulationdays} $subdir_riseRefflongTEhalved 0 0.5
+            ./bin/lct_impact_distribution_assumption ${Reffs[index]} $tReff ${simulationdays} $subdir_riseRefflongTEdoubled 0 2.0
+        fi
     done
 done
 
@@ -107,4 +116,5 @@ if [ ! -d "$subdir_age_resolution" ]; then
 fi
 cmake --build . --target lct_impact_age_resolution 
 contact_data_dir="_deps/memilio-src/data/contacts/"
-./bin/lct_impact_age_resolution $contact_data_dir $subdir_age_resolution 
+tmax=200
+./bin/lct_impact_age_resolution $contact_data_dir $subdir_age_resolution $tmax

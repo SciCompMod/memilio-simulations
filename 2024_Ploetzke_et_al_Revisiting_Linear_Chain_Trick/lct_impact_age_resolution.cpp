@@ -364,23 +364,26 @@ mio::IOResult<void> simulation_without_ageresolution(ScalarType tmax, std::strin
 }
 
 /** 
-* Usage: lct_impact_age_resolution <contact_data_dir> <save_dir> 
-*   Both command line arguments are optional but it is beneficial to specify the 
+* Usage: lct_impact_age_resolution <contact_data_dir> <save_dir> <tmax>
+*   All command line arguments are optional but it is beneficial to specify the 
 *   <contact_data_dir> as the default is just an educated guess.
+* - <tmax>: End time of the simulation.
 */
 int main(int argc, char** argv)
 {
     std::string contact_data_dir = "../../data/contacts/";
     std::string save_dir         = "";
+    ScalarType tmax              = 40;
     switch (argc) {
+    case 4:
+        tmax = std::stod(argv[3]);
+        [[fallthrough]];
     case 3:
         save_dir = argv[2];
         [[fallthrough]];
     case 2:
         contact_data_dir = argv[1];
     }
-
-    ScalarType tmax = 40;
 
     // Simulation with initial exposed population in age group 2.
     auto result = simulation_with_ageresolution(2, tmax, contact_data_dir, save_dir);

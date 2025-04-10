@@ -60,6 +60,12 @@ const ScalarType recoveredPerInfectedNoSymptoms   = 0.206901;
 const ScalarType severePerInfectedSymptoms        = 0.07864;
 const ScalarType criticalPerSevere                = 0.17318;
 const ScalarType deathsPerCritical                = 0.21718;
+
+using InfState = mio::lsecir::InfectionState;
+using LctState =
+    std::conditional<(num_subcompartments == 0), mio::LctInfectionState<InfState, 1, 3, 3, 7, 7, 13, 1, 1>,
+                     mio::LctInfectionState<InfState, 1, num_subcompartments, num_subcompartments, num_subcompartments,
+                                            num_subcompartments, num_subcompartments, 1, 1>>::type;
 } // namespace params
 
 /** 
@@ -116,20 +122,25 @@ std::vector<ScalarType> get_initial_values()
     // Compartment sizes are distributed uniformly to the subcompartments.
     std::vector<ScalarType> initial_value_vector;
     initial_value_vector.push_back(init_compartments[(size_t)InfState::Susceptible]);
-    for (size_t i = 0; i < num_subcompartments; i++) {
-        initial_value_vector.push_back(init_compartments[(size_t)InfState::Exposed] / num_subcompartments);
+    for (size_t i = 0; i < LctState::get_num_subcompartments<InfState::Exposed>(); i++) {
+        initial_value_vector.push_back(init_compartments[(size_t)InfState::Exposed] /
+                                       LctState::get_num_subcompartments<InfState::Exposed>());
     }
-    for (size_t i = 0; i < num_subcompartments; i++) {
-        initial_value_vector.push_back(init_compartments[(size_t)InfState::InfectedNoSymptoms] / num_subcompartments);
+    for (size_t i = 0; i < LctState::get_num_subcompartments<InfState::InfectedNoSymptoms>(); i++) {
+        initial_value_vector.push_back(init_compartments[(size_t)InfState::InfectedNoSymptoms] /
+                                       LctState::get_num_subcompartments<InfState::InfectedNoSymptoms>());
     }
-    for (size_t i = 0; i < num_subcompartments; i++) {
-        initial_value_vector.push_back(init_compartments[(size_t)InfState::InfectedSymptoms] / num_subcompartments);
+    for (size_t i = 0; i < LctState::get_num_subcompartments<InfState::InfectedSymptoms>(); i++) {
+        initial_value_vector.push_back(init_compartments[(size_t)InfState::InfectedSymptoms] /
+                                       LctState::get_num_subcompartments<InfState::InfectedSymptoms>());
     }
-    for (size_t i = 0; i < num_subcompartments; i++) {
-        initial_value_vector.push_back(init_compartments[(size_t)InfState::InfectedSevere] / num_subcompartments);
+    for (size_t i = 0; i < LctState::get_num_subcompartments<InfState::InfectedSevere>(); i++) {
+        initial_value_vector.push_back(init_compartments[(size_t)InfState::InfectedSevere] /
+                                       LctState::get_num_subcompartments<InfState::InfectedSevere>());
     }
-    for (size_t i = 0; i < num_subcompartments; i++) {
-        initial_value_vector.push_back(init_compartments[(size_t)InfState::InfectedCritical] / num_subcompartments);
+    for (size_t i = 0; i < LctState::get_num_subcompartments<InfState::InfectedCritical>(); i++) {
+        initial_value_vector.push_back(init_compartments[(size_t)InfState::InfectedCritical] /
+                                       LctState::get_num_subcompartments<InfState::InfectedCritical>());
     }
     initial_value_vector.push_back(init_compartments[(size_t)InfState::Recovered]);
     initial_value_vector.push_back(init_compartments[(size_t)InfState::Dead]);
@@ -142,11 +153,12 @@ std::vector<ScalarType> get_initial_values()
 *
 *   The simulation uses LCT models with Covid-19 inspired parameters and an initial contact rate such that the 
 *   effective reproduction number is initially approximately equal to one. The initial values are chosen such that the
-*   daily new transmissions remain constant. The contact rate is changed at simulation day 2 such that the effective 
-*   reproduction number at simulation day 2 is equal to the input Reff2. 
-*   Therefore, we simulate a change point at day 2.
+*   daily new transmissions remain constant. The contact rate is changed at simulation day tReff such that the effective 
+*   reproduction number at simulation day tReff is equal to the input Reff. 
+*   Therefore, we simulate a change point at day tReff.
 *   
-* @param[in] Reff2 The effective reproduction number to be set at simulation time 2. Please use a number greater zero.
+* @param[in] Reff The effective reproduction number to be set at simulation time tReff. Please use a number greater zero.
+* @param[in] tReff The time of the change point from an effective reproduction number of one to Reff.
 * @param[in] tmax Time horizon of the simulation.
 * @param[in] save_dir Specifies the directory where the results should be stored.
 *    Provide an empty string if results should not be saved.
@@ -157,19 +169,16 @@ std::vector<ScalarType> get_initial_values()
 *   The printed values refer to the final size only if tmax is chosen large enough.
 * @returns Any IO errors that occur when saving the results.
 */
-mio::IOResult<void> simulate(ScalarType Reff2, ScalarType tmax, std::string save_dir = "",
+mio::IOResult<void> simulate(ScalarType Reff, ScalarType tReff, ScalarType tmax, std::string save_dir = "",
                              bool save_subcompartments = false, ScalarType scale_TimeExposed = 1.,
                              bool print_final_size = false)
 {
     using namespace params;
-    std::cout << "Simulation with " << num_subcompartments << " subcompartments and reproduction number " << Reff2
-              << "." << std::endl;
+    std::cout << "Simulation with " << num_subcompartments << " subcompartments and reproduction number " << Reff
+              << " from day " << tReff << " on." << std::endl;
 
     // Initialize LCT model.
-    using InfState = mio::lsecir::InfectionState;
-    using LctState = mio::LctInfectionState<InfState, 1, num_subcompartments, num_subcompartments, num_subcompartments,
-                                            num_subcompartments, num_subcompartments, 1, 1>;
-    using Model    = mio::lsecir::Model<LctState>;
+    using Model = mio::lsecir::Model<LctState>;
     Model model;
 
     // Set parameters.
@@ -197,18 +206,19 @@ mio::IOResult<void> simulate(ScalarType Reff2, ScalarType tmax, std::string save
                (1 - recoveredPerInfectedNoSymptoms) * timeInfectedSymptoms * riskOfInfectionFromSymptomatic));
 
     mio::ContactMatrixGroup contact_matrix = mio::ContactMatrixGroup(1, 1);
-    if (Reff2 <= 1.) {
+    if (Reff <= 1.) {
         // Perform a simulation with a decrease in the effective reproduction number on day 2.
         contact_matrix[0] = mio::ContactMatrix(Eigen::MatrixXd::Constant(1, 1, contacts_R1));
-        contact_matrix[0].add_damping(0., mio::SimulationTime(1.9));
-        contact_matrix[0].add_damping(Reff2, mio::SimulationTime(2.));
+        //This is necessary as otherwise, the damping is implemented over a time span instead of a break.
+        contact_matrix[0].add_damping(0., mio::SimulationTime(tReff - 0.1));
+        contact_matrix[0].add_damping(Reff, mio::SimulationTime(tReff));
     }
     else {
         // Perform a simulation with an increase in the effective reproduction number on day 2.
-        contact_matrix[0] = mio::ContactMatrix(Eigen::MatrixXd::Constant(1, 1, Reff2 * contacts_R1));
-        contact_matrix[0].add_damping(1 - 1. / Reff2, mio::SimulationTime(-1.));
-        contact_matrix[0].add_damping(1 - 1. / Reff2, mio::SimulationTime(1.9));
-        contact_matrix[0].add_damping(0., mio::SimulationTime(2.));
+        contact_matrix[0] = mio::ContactMatrix(Eigen::MatrixXd::Constant(1, 1, Reff * contacts_R1));
+        contact_matrix[0].add_damping(1 - 1. / Reff, mio::SimulationTime(-1.));
+        contact_matrix[0].add_damping(1 - 1. / Reff, mio::SimulationTime(tReff - 0.1));
+        contact_matrix[0].add_damping(0., mio::SimulationTime(tReff));
     }
 
     model.parameters.get<mio::lsecir::ContactPatterns>() = mio::UncertainContactMatrix<ScalarType>(contact_matrix);
@@ -230,8 +240,10 @@ mio::IOResult<void> simulate(ScalarType Reff2, ScalarType tmax, std::string save
 
     // Save results and print desired information.
     if (!save_dir.empty()) {
-        std::string Reff2string = std::to_string(Reff2);
-        std::string filename = save_dir + "lct_Reff" + Reff2string.substr(0, Reff2string.find(".") + 2) + "_subcomp" +
+        std::string Reffstring  = std::to_string(Reff);
+        std::string tReffstring = std::to_string(tReff);
+        std::string filename    = save_dir + "lct_Reff" + Reffstring.substr(0, Reffstring.find(".") + 2) + "_t" +
+                               tReffstring.substr(0, tReffstring.find(".") + 2) + "_subcomp" +
                                std::to_string(num_subcompartments);
         if (save_subcompartments) {
             filename = filename + "_subcompartments.h5";
@@ -261,7 +273,7 @@ mio::IOResult<void> simulate(ScalarType Reff2, ScalarType tmax, std::string save
 }
 
 /** 
-* Usage: lct_impact_distribution_assumption <Reff2> <tmax> <save_dir> <save_subcompartments> <scale_TimeExposed> 
+* Usage: lct_impact_distribution_assumption <Reff> <tReff> <tmax> <save_dir> <save_subcompartments> <scale_TimeExposed> 
 *           <print_final_size>
 *   All command line arguments are optional. Simple default values are provided if not specified.
 *   All parameters are passed to the simulation() function. See the documentation for a description of the parameters.
@@ -271,7 +283,8 @@ mio::IOResult<void> simulate(ScalarType Reff2, ScalarType tmax, std::string save
 */
 int main(int argc, char** argv)
 {
-    ScalarType Reff2             = 1.;
+    ScalarType Reff              = 1.;
+    ScalarType tReff             = 0.;
     ScalarType tmax              = 40;
     std::string save_dir         = "";
     bool save_subcompartments    = false;
@@ -279,25 +292,27 @@ int main(int argc, char** argv)
     bool print_final_size        = false;
 
     switch (argc) {
+    case 8:
+        print_final_size = std::stoi(argv[7]);
+        [[fallthrough]];
     case 7:
-        print_final_size = std::stoi(argv[6]);
+        scale_TimeExposed = std::stod(argv[6]);
         [[fallthrough]];
     case 6:
-        scale_TimeExposed = std::stod(argv[5]);
+        save_subcompartments = std::stoi(argv[5]);
         [[fallthrough]];
     case 5:
-        save_subcompartments = std::stoi(argv[4]);
+        save_dir = argv[4];
         [[fallthrough]];
     case 4:
-        save_dir = argv[3];
+        tmax = std::stod(argv[3]);
         [[fallthrough]];
     case 3:
-        tmax = std::stod(argv[2]);
-        [[fallthrough]];
+        tReff = std::stod(argv[2]);
     case 2:
-        Reff2 = std::stod(argv[1]);
+        Reff = std::stod(argv[1]);
     }
-    auto result = simulate(Reff2, tmax, save_dir, save_subcompartments, scale_TimeExposed, print_final_size);
+    auto result = simulate(Reff, tReff, tmax, save_dir, save_subcompartments, scale_TimeExposed, print_final_size);
     if (!result) {
         printf("%s\n", result.error().formatted_message().c_str());
         return -1;

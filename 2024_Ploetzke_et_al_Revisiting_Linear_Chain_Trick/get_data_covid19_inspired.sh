@@ -27,12 +27,14 @@ RelativeTransmissionNoSymptoms=1.
 RiskOfInfectionFromSymptomatic=0.3
 month_oct=10
 day_oct=1
-scale_contacts_oct=0.6537
-npi_size_oct=0.3
+scale_contacts_oct=1.1*0.6537
+npi_size_oct=1.1*0.3
 scale_confirmed_cases_oct=1.2
 
 # Compile with different numbers of subcompartments and run simulations.
-for num_subcomp in 1 3 10 50
+# Additionally: Setup with numbers of subcompartments so that each corresponds to the approximate stay time in the compartment.
+# This is done by setting the makro NUM_SUBCOMPARTMENTS to zero.
+for num_subcomp in 0 1 3 10 50
 do
     cmake -DNUM_SUBCOMPARTMENTS=$num_subcomp -DCMAKE_BUILD_TYPE="Release" .
     cmake --build . --target lct_covid19_inspired_scenario
@@ -40,9 +42,3 @@ do
     # Simulation for 01/10/2020.
     ./bin/lct_covid19_inspired_scenario $infection_data_dir $contact_data_dir $result_dir $year $month_oct $day_oct $RelativeTransmissionNoSymptoms $RiskOfInfectionFromSymptomatic $scale_contacts_oct $scale_confirmed_cases_oct $npi_size_oct 
 done
-
-# Setup with numbers of subcompartments so that each corresponds to the approximate stay time in the compartment.
-# This is done by setting the makro NUM_SUBCOMPARTMENTS to zero.
-cmake -DNUM_SUBCOMPARTMENTS=0 -DCMAKE_BUILD_TYPE="Release" .
-cmake --build . --target lct_covid19_inspired_scenario
-./bin/lct_covid19_inspired_scenario $infection_data_dir $contact_data_dir $result_dir $year $month_oct $day_oct $RelativeTransmissionNoSymptoms $RiskOfInfectionFromSymptomatic $scale_contacts_oct $scale_confirmed_cases_oct $npi_size_oct 

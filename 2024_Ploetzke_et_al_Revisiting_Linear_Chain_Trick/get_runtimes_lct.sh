@@ -25,7 +25,8 @@ fi
 cd build/
 cmake -DCMAKE_BUILD_TYPE="Release" -DMEMILIO_ENABLE_OPENMP=ON ..
 
-for i in {1..200}
+#for i in {1..200}
+for i in {100..1500..100}
 do  
     cmake -DNUM_SUBCOMPARTMENTS=$i -DCMAKE_BUILD_TYPE="Release" -DMEMILIO_ENABLE_OPENMP=ON .
     cmake --build . --target lct_runtime

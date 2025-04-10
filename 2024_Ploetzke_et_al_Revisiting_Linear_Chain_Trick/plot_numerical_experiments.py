@@ -48,6 +48,7 @@ color_dict = {'ODE': '#1f77b4',
               'LCT10': '#ff7f0e',
               'LCT20': '#9467bd',
               'LCT50':  '#e377c2',
+              'LCTvar':  '#bbf90f',
               }
 fontsize_labels = 14
 fontsize_legends = 14
@@ -468,7 +469,7 @@ def plot_daily_new_transmissions(files, legend_labels, file_name="", tmax=0):
     plt.close()
 
 
-def get_file_name(result_dir, Reff, num_subcompartments, boolsubcomp=False):
+def get_file_name(result_dir, Reff, tReff, num_subcompartments, boolsubcomp=False):
     """ Gives a paths to a file with the simulation results for an LCT model with num_subcompartments subcompartments, 
     where the effective reproduction number is set to Reff at simulation time 2.
     This uses standard defined naming convention of the LCT simulations.
@@ -478,13 +479,8 @@ def get_file_name(result_dir, Reff, num_subcompartments, boolsubcomp=False):
     @param[in] num_subcompartments: Number of subcompartments for the LCT model used to obtain the simulation results.
     @param[in] boolsubcomp: Specifies whether the result should contain subcompartments (or accumulated results). 
     """
-    if Reff < 1:
-        filename = "lct_Reff" + f"{Reff:.{1}f}" + \
-            "_subcomp" + f"{num_subcompartments}"
-    else:
-        # Just use integer numbers for Reff bigger than 1.
-        filename = "lct_Reff" + \
-            f"{int(Reff)}"+".0_subcomp" + f"{num_subcompartments}"
+    filename = "lct_Reff" + f"{Reff:.{1}f}" + "_t" + f"{tReff:.{1}f}" +\
+        "_subcomp" + f"{num_subcompartments}"
     if boolsubcomp:
         filename += "_subcompartments"
     return os.path.join(result_dir, filename)
@@ -503,101 +499,101 @@ def main():
 
     if 3 in figures:
         folder = os.path.join(result_dir, "dropReff")
-        plot_daily_new_transmissions([get_file_name(folder, 0.5, 1), get_file_name(folder, 0.5, 3),
-                                      get_file_name(folder, 0.5, 10), get_file_name(folder, 0.5, 50)],
+        plot_daily_new_transmissions([get_file_name(folder, 0.5, 2, 1), get_file_name(folder, 0.5, 2, 3),
+                                      get_file_name(folder, 0.5, 2, 10), get_file_name(folder, 0.5, 2, 50), get_file_name(folder, 0.5, 2, 0)],
                                      legend_labels=list(
-            ["ODE", "LCT3", "LCT10", "LCT50"]),
+            ["ODE", "LCT3", "LCT10", "LCT50", "LCTvar"]),
             file_name="new_infections_drophalf")
         folder = os.path.join(result_dir, "riseReffTo2short")
-        plot_daily_new_transmissions([get_file_name(folder, 2, 1), get_file_name(folder, 2, 3),
-                                      get_file_name(folder, 2, 10), get_file_name(folder, 2, 50)],
+        plot_daily_new_transmissions([get_file_name(folder, 2, 2, 1), get_file_name(folder, 2, 2, 3),
+                                      get_file_name(folder, 2, 2, 10), get_file_name(folder, 2,  2, 50), get_file_name(folder, 2,  2, 0)],
                                      legend_labels=list(
-            ["ODE", "LCT3", "LCT10", "LCT50"]),
+            ["ODE", "LCT3", "LCT10", "LCT50", "LCTvar"]),
             file_name="new_infections_rise2")
     if 4 in figures:
         folder = os.path.join(result_dir, "dropReff")
-        plot_single_compartment([get_file_name(folder, 0.5, 1), get_file_name(folder, 0.5, 3),
-                                 get_file_name(folder, 0.5, 10), get_file_name(folder, 0.5, 50)],
+        plot_single_compartment([get_file_name(folder, 0.5, 2, 1), get_file_name(folder, 0.5, 2, 3),
+                                 get_file_name(folder, 0.5, 2, 10), get_file_name(folder, 0.5, 2, 50), get_file_name(folder, 0.5, 2, 0)],
                                 legend_labels=list(
-            ["ODE", "LCT3", "LCT10", "LCT50"]),
+            ["ODE", "LCT3", "LCT10", "LCT50", "LCTvar"]),
             compartment_idx=2, file_name="carrier_compartment_drophalf")
-        plot_single_compartment([get_file_name(folder, 0.5, 1), get_file_name(folder, 0.5, 3),
-                                 get_file_name(folder, 0.5, 10), get_file_name(folder, 0.5, 50)],
+        plot_single_compartment([get_file_name(folder, 0.5, 2, 1), get_file_name(folder, 0.5, 2, 3),
+                                 get_file_name(folder, 0.5, 2, 10), get_file_name(folder, 0.5, 2, 50), get_file_name(folder, 0.5, 2, 0)],
                                 legend_labels=list(
-            ["ODE", "LCT3", "LCT10", "LCT50"]),
+            ["ODE", "LCT3", "LCT10", "LCT50", "LCTvar"]),
             compartment_idx=3, file_name="infected_compartment_drophalf")
         folder = os.path.join(result_dir, "riseReffTo2short")
-        plot_single_compartment([get_file_name(folder, 2, 1), get_file_name(folder, 2, 3),
-                                 get_file_name(folder, 2, 10), get_file_name(folder, 2, 50)],
+        plot_single_compartment([get_file_name(folder, 2, 2, 1), get_file_name(folder, 2, 2, 3),
+                                 get_file_name(folder, 2, 2, 10), get_file_name(folder, 2, 2, 50), get_file_name(folder, 2, 2, 0)],
                                 legend_labels=list(
-            ["ODE", "LCT3", "LCT10", "LCT50"]),
+            ["ODE", "LCT3", "LCT10", "LCT50", "LCTvar"]),
             compartment_idx=2, file_name="carrier_compartment_rise2")
-        plot_single_compartment([get_file_name(folder, 2, 1), get_file_name(folder, 2, 3),
-                                 get_file_name(folder, 2, 10), get_file_name(folder, 2, 50)],
+        plot_single_compartment([get_file_name(folder, 2, 2, 1), get_file_name(folder, 2, 2, 3),
+                                 get_file_name(folder, 2, 2, 10), get_file_name(folder, 2, 2, 50), get_file_name(folder, 2, 2, 0)],
                                 legend_labels=list(
-            ["ODE", "LCT3", "LCT10", "LCT50"]),
+            ["ODE", "LCT3", "LCT10", "LCT50", "LCTvar"]),
             compartment_idx=3, file_name="infected_compartment_rise2")
     if 5 in figures:
         folder = os.path.join(result_dir, "riseReffTo2short")
         subcompartments = [10, 50]
         for i in subcompartments:
-            plot_subcompartments3D(get_file_name(folder, 2, i,  True), i, 1,
+            plot_subcompartments3D(get_file_name(folder, 2, 2, i,  True), i, 1,
                                    1, file_name="subcompartments"+f"{i}"+"_exposed")
-            plot_subcompartments3D(get_file_name(folder, 2, i,  True), i, 2,
+            plot_subcompartments3D(get_file_name(folder, 2, 2, i,  True), i, 2,
                                    1, file_name="subcompartments"+f"{i}"+"_carrier")
-            plot_subcompartments3D(get_file_name(folder, 2, i,  True), i, 3,
+            plot_subcompartments3D(get_file_name(folder, 2, 2, i,  True), i, 3,
                                    1, file_name="subcompartments"+f"{i}"+"_infected")
     if 6 in figures:
         folder = os.path.join(result_dir, "riseReffTo2shortTEhalved")
-        plot_daily_new_transmissions([get_file_name(folder, 2, 1), get_file_name(folder, 2, 3),
-                                      get_file_name(folder, 2, 10), get_file_name(folder, 2, 50)],
+        plot_daily_new_transmissions([get_file_name(folder, 2, 2, 1), get_file_name(folder, 2, 2, 3),
+                                      get_file_name(folder, 2, 2, 10), get_file_name(folder, 2, 2, 50)],
                                      legend_labels=list(
             ["ODE", "LCT3", "LCT10", "LCT50"]),
             file_name="new_infections_rise2_TEhalved")
         plot_subcompartments3D(get_file_name(
-            folder, 2, 50,  True), 50, 2, 1, file_name="subcompartments50_carrier_TEhalved")
+            folder, 2, 2, 50,  True), 50, 2, 1, file_name="subcompartments50_carrier_TEhalved")
     if 7 in figures:
         folder = os.path.join(result_dir, "riseRefflong")
-        plot_daily_new_transmissions([get_file_name(folder, 2, 1), get_file_name(folder, 2, 3),
-                                      get_file_name(folder, 2, 10), get_file_name(folder, 2, 50)],
+        plot_daily_new_transmissions([get_file_name(folder, 2, 0, 1), get_file_name(folder, 2, 0, 3),
+                                      get_file_name(folder, 2, 0, 10), get_file_name(folder, 2, 0, 50), get_file_name(folder, 2, 0, 0)],
                                      legend_labels=list(
-            ["ODE", "LCT3", "LCT10", "LCT50"]),
+            ["ODE", "LCT3", "LCT10", "LCT50", "LCTvar"]),
             file_name="new_infections_rise2_long", tmax=150)
-        plot_daily_new_transmissions([get_file_name(folder, 4, 1), get_file_name(folder, 4, 3),
-                                      get_file_name(folder, 4, 10), get_file_name(folder, 4, 50)],
+        plot_daily_new_transmissions([get_file_name(folder, 4, 0, 1), get_file_name(folder, 4, 0, 3),
+                                      get_file_name(folder, 4, 0, 10), get_file_name(folder, 4, 0, 50), get_file_name(folder, 4, 0, 0)],
                                      legend_labels=list(
-            ["ODE", "LCT3", "LCT10", "LCT50"]),
+            ["ODE", "LCT3", "LCT10", "LCT50", "LCTvar"]),
             file_name="new_infections_rise4_long", tmax=70)
     if 8 in figures:
         folder = os.path.join(result_dir, "riseRefflong")
         Reffs = list(range(2, 11))
         subcompartments = list(range(1, 11))
-        plot_epidemic_peak_size(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
-                                          Reffs, subcompartments, file_name="compare_peak_size")
-        plot_epidemic_peak_timing(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
-                                              Reffs, subcompartments, file_name="compare_peak_days")
+        plot_epidemic_peak_size(lambda Reff, subcompartment: get_file_name(folder, Reff, 0, subcompartment),
+                                Reffs, subcompartments, file_name="compare_peak_size")
+        plot_epidemic_peak_timing(lambda Reff, subcompartment: get_file_name(folder, Reff, 0, subcompartment),
+                                  Reffs, subcompartments, file_name="compare_peak_days")
     if 9 in figures:
         folder = os.path.join(result_dir, "riseRefflongTEhalved")
         Reffs = list(range(2, 11))
         subcompartments = list(range(1, 11))
-        plot_epidemic_peak_size(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
-                                          Reffs, subcompartments, file_name="compare_peak_size_TEhalved")
-        plot_epidemic_peak_timing(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
-                                              Reffs, subcompartments, file_name="compare_peak_days_TEhalved")
+        plot_epidemic_peak_size(lambda Reff, subcompartment: get_file_name(folder, Reff, 0, subcompartment),
+                                Reffs, subcompartments, file_name="compare_peak_size_TEhalved")
+        plot_epidemic_peak_timing(lambda Reff, subcompartment: get_file_name(folder, Reff, 0, subcompartment),
+                                  Reffs, subcompartments, file_name="compare_peak_days_TEhalved")
     if 10 in figures:
         folder = os.path.join(result_dir, "riseRefflongTEdoubled")
         Reffs = list(range(2, 11))
         subcompartments = list(range(1, 11))
-        plot_epidemic_peak_size(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
-                                          Reffs, subcompartments, file_name="compare_peak_size_TEdoubled")
-        plot_epidemic_peak_timing(lambda Reff, subcompartment: get_file_name(folder, Reff, subcompartment),
-                                              Reffs, subcompartments, file_name="compare_peak_days_TEdoubled")
+        plot_epidemic_peak_size(lambda Reff, subcompartment: get_file_name(folder, Reff, 0, subcompartment),
+                                Reffs, subcompartments, file_name="compare_peak_size_TEdoubled")
+        plot_epidemic_peak_timing(lambda Reff, subcompartment: get_file_name(folder, Reff, 0, subcompartment),
+                                  Reffs, subcompartments, file_name="compare_peak_days_TEdoubled")
     if 11 in figures:
         folder = os.path.join(result_dir, "riseRefflong")
-        plot_compartments([get_file_name(folder, 2, 1), get_file_name(folder, 2, 3),
-                           get_file_name(folder, 2, 10), get_file_name(folder, 2, 50)],
+        plot_compartments([get_file_name(folder, 2, 0, 1), get_file_name(folder, 2, 0, 3),
+                           get_file_name(folder, 2, 0, 10), get_file_name(folder, 2, 0, 50), get_file_name(folder, 2, 0, 0)],
                           legend_labels=list(
-            ["ODE", "LCT3", "LCT10", "LCT50"]),
+            ["ODE", "LCT3", "LCT10", "LCT50", "LCTvar"]),
             file_name="compartments_rise2_long")
     if 13 in figures:
         folder = os.path.join(result_dir, "age_resolution")
