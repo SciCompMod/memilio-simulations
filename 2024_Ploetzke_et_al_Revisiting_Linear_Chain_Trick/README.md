@@ -6,7 +6,7 @@ This directory contains all files related to the paper
 https://doi.org/10.48550/arXiv.2412.09140.
 
 ## Requirements
-We require the libraries `JsonCpp` and `HDF5` for running the simulations (these are optional for the MEmilio project, see [MEmilio cpp README](https://github.com/SciCompMod/memilio/blob/main/cpp/README.md)).
+We require the libraries `JsonCpp` and `HDF5` for running the simulations (these are optional for the MEmilio project, see [MEmilio cpp README](https://github.com/SciCompMod/memilio/blob/main/cpp/README.md)). For the runtime measurements, `HDF5` is not required but `OpenMP`.
 
 The memilio.epidata package needs to be installed for the python plot scripts and the data download. 
 Have a look at the [pycode README](../../../pycode/README.rst) and the [memilio-epidata README](../../../pycode/memilio-epidata/README.rst) for instructions how to install the package.

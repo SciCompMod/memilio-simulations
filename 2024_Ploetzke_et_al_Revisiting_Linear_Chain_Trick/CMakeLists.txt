@@ -27,7 +27,6 @@ FetchContent_MakeAvailable(memilio)
 set(MEMILIO_BUILD_TESTS OFF)
 set(MEMILIO_BUILD_EXAMPLES OFF)
 set(MEMILIO_BUILD_SIMULATIONS OFF)
-set(MEMILIO_ENABLE_OPENMP OFF)
 
 # Add the subdirectory for MEmilio build.
 add_subdirectory(${memilio_SOURCE_DIR}/cpp ${memilio_BINARY_DIR})
@@ -38,18 +37,23 @@ if(NOT DEFINED NUM_SUBCOMPARTMENTS)
 endif()
 add_definitions(-DNUM_SUBCOMPARTMENTS=${NUM_SUBCOMPARTMENTS})
 
-add_executable(lct_impact_distribution_assumption lct_impact_distribution_assumption.cpp)
-target_link_libraries(lct_impact_distribution_assumption PRIVATE memilio lct_secir)
+find_package(HDF5)
 
-add_executable(lct_impact_age_resolution lct_impact_age_resolution.cpp)
-target_link_libraries(lct_impact_age_resolution PRIVATE memilio lct_secir)
+if(HDF5_FOUND)
+  add_executable(lct_impact_distribution_assumption lct_impact_distribution_assumption.cpp)
+  target_link_libraries(lct_impact_distribution_assumption PRIVATE memilio lct_secir)
 
-add_executable(lct_covid19_inspired_scenario lct_covid19_inspired_scenario.cpp)
-target_link_libraries(lct_covid19_inspired_scenario PRIVATE memilio lct_secir)
+  add_executable(lct_impact_age_resolution lct_impact_age_resolution.cpp)
+  target_link_libraries(lct_impact_age_resolution PRIVATE memilio lct_secir)
 
-# Just build run time measurement target if MEMILIO_ENABLE_OPENMP is explicitly set to on.
-if (MEMILIO_ENABLE_OPENMP)
+  add_executable(lct_covid19_inspired_scenario lct_covid19_inspired_scenario.cpp)
+  target_link_libraries(lct_covid19_inspired_scenario PRIVATE memilio lct_secir)
+endif()
+
+find_package(OpenMP)
+# Just build run time measurement target if OpenMP is available. 
+if (OPENMP_CXX_FOUND)
   add_executable(lct_runtime lct_runtime.cpp)
-  target_link_libraries(lct_runtime PRIVATE memilio lct_secir)
+  target_link_libraries(lct_runtime PRIVATE memilio lct_secir OpenMP::OpenMP_CXX)
   # target_compile_options(lct_runtime PRIVATE -O0)
 endif()

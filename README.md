@@ -35,7 +35,7 @@ Furthermore, you can specify the maximum number of concurrent processes to use w
 **If the build fails, you may be missing requirements/dependencies!**
 
 ## Requirements
-For most simulations, we require the libraries `JsonCpp` and `HDF5` for running the simulations (these are optional for the MEmilio project, see [MEmilio cpp README](https://github.com/SciCompMod/memilio/blob/main/cpp/README.md)). The git repo of the library `JsonCpp` is still bundled with MEmilio while `HDF5` is not. Please have a look at the README in a specific folder for further specifications.
+For most simulations, we require the libraries `JsonCpp` and `HDF5` (these are optional for the MEmilio project, see [MEmilio cpp README](https://github.com/SciCompMod/memilio/blob/main/cpp/README.md)). The git repo of the library `JsonCpp` is still bundled with MEmilio while `HDF5` is not. Please have a look at the README in a specific folder for further specifications. If the requirements are not met, certain targets may not be built.
 
 ## Information for Developers
 If you want to create a new folder, e.g. for the files of a new paper, you should follow the steps below:

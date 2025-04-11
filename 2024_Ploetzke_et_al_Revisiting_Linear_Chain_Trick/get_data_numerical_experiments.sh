@@ -4,10 +4,6 @@
 ## distribution assumption and of the age resolution.
 ## The files lct_impact_distribution_assumption.cpp and lct_impact_age_resolution.cpp are used.
 
-# Define and construct relevant folders.
-if [ ! -d "build/" ]; then
-    mkdir "build/"
-fi
 cd build/
 cmake ..
 
