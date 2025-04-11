@@ -182,6 +182,14 @@ mio::IOResult<mio::UncertainContactMatrix<ScalarType>> get_contact_matrix(std::s
         contact_matrices[size_t(contact_location.first)].get_minimum()  = Eigen::MatrixXd::Zero(num_groups, num_groups);
     }
 
+    // auto offset_npi = mio::SimulationTime(mio::get_offset_in_days(mio::Date(2020, 10, 2), start_date));
+    // for (auto&& contact_location : contact_locations) {
+    //     contact_matrices[size_t(contact_location.first)].add_damping(
+    //         Eigen::MatrixXd::Constant(num_groups, num_groups, 0.), offset_npi - mio::SimulationTime(0.5));
+    //     contact_matrices[size_t(contact_location.first)].add_damping(
+    //         Eigen::MatrixXd::Constant(num_groups, num_groups, -0.1), offset_npi);
+    // }
+
     // Add NPIs to the contact matrices.
     mio::Date end_date     = mio::offset_date_by_days(start_date, (int)tmax);
     auto start_npi_october = mio::Date(2020, 10, 25);
@@ -305,9 +313,8 @@ mio::IOResult<void> simulate(std::string const& contact_data_dir, std::string co
             return save_result_status;
         }
     }
-    print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 1);
-    print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 5);
-    print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 30);
+    print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 0.1);
+    print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 2);
     print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 40);
     // Print the predicted number of daily new transmissions at the start of the simulation.
     // Could be used to compare the result with the extrapolated reported data and, afterwards, to scale the

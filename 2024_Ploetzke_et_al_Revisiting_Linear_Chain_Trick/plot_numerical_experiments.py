@@ -596,14 +596,22 @@ def main():
             ["ODE", "LCT3", "LCT10", "LCT50", "LCTvar"]),
             file_name="compartments_rise2_long")
     if 13 in figures:
-        folder = os.path.join(result_dir, "age_resolution")
-        plot_compartments([os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit2"),
-                           os.path.join(
+        folder = os.path.join(result_dir, "age_resolution_short")
+        plot_compartments([os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit0"), os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit1"), os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit2"),
+                           os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit3"), os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit4"), os.path.join(
             folder, "lct_ageresolved_subcomp10_agegroupinit5"),
             os.path.join(folder, "lct_nonageresolved_subcomp10")],
             legend_labels=list(
-            ["A15–34 scenario", "A80+ scenario", "Non age-resolved scenario"]),
-            file_name="compartments_agevsnoage")
+            ["A0–4", "A5–14", "A15–34", "A35–59", "A60–79", "A80+", "Non age-resolved"]),
+            file_name="compartments_agevsnoage_short")
+        folder = os.path.join(result_dir, "age_resolution_long")
+        plot_compartments([os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit0"), os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit1"), os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit2"),
+                           os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit3"), os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit4"), os.path.join(
+            folder, "lct_ageresolved_subcomp10_agegroupinit5"),
+            os.path.join(folder, "lct_nonageresolved_subcomp10")],
+            legend_labels=list(
+            ["A0–4", "A5–14", "A15–34", "A35–59", "A60–79", "A80+", "Non age-resolved"]),
+            file_name="compartments_agevsnoage_long")
 
 
 if __name__ == "__main__":

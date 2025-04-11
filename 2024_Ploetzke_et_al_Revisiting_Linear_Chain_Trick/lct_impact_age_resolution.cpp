@@ -385,17 +385,19 @@ int main(int argc, char** argv)
         contact_data_dir = argv[1];
     }
 
-    // Simulation with initial exposed population in age group 2.
-    auto result = simulation_with_ageresolution(2, tmax, contact_data_dir, save_dir);
+    // Simulation with initial exposed population in age group 0.
+    auto result = simulation_with_ageresolution(0, tmax, contact_data_dir, save_dir);
     if (!result) {
         printf("%s\n", result.error().formatted_message().c_str());
         return -1;
     }
-    // Simulation with initial exposed population in age group 5.
-    result = simulation_with_ageresolution(5, tmax, contact_data_dir, save_dir);
-    if (!result) {
-        printf("%s\n", result.error().formatted_message().c_str());
-        return -1;
+    // Simulation with initial exposed population in other age groups.
+    for (size_t i = 1; i < params::num_groups; i++) {
+        result = simulation_with_ageresolution(i, tmax, contact_data_dir, save_dir);
+        if (!result) {
+            printf("%s\n", result.error().formatted_message().c_str());
+            return -1;
+        }
     }
     // Simulation without age resolution.
     result = simulation_without_ageresolution(tmax, contact_data_dir, save_dir);

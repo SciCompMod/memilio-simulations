@@ -106,11 +106,21 @@ do
 done
 
 # Sixth case: Simulation for the impact of age resolution.
-subdir_age_resolution="$result_dir/age_resolution/"
-if [ ! -d "$subdir_age_resolution" ]; then
-    mkdir "$subdir_age_resolution"
+# 40 days.
+subdir_age_resolution_short="$result_dir/age_resolution_short/"
+if [ ! -d "$subdir_age_resolution_short" ]; then
+    mkdir "$subdir_age_resolution_short"
+fi
+cmake --build . --target lct_impact_age_resolution 
+contact_data_dir="_deps/memilio-src/data/contacts/"
+tmax=40
+./bin/lct_impact_age_resolution $contact_data_dir $subdir_age_resolution_short $tmax
+# 200 days.
+subdir_age_resolution_long="$result_dir/age_resolution_long/"
+if [ ! -d "$subdir_age_resolution_long" ]; then
+    mkdir "$subdir_age_resolution_long"
 fi
 cmake --build . --target lct_impact_age_resolution 
 contact_data_dir="_deps/memilio-src/data/contacts/"
 tmax=200
-./bin/lct_impact_age_resolution $contact_data_dir $subdir_age_resolution $tmax
+./bin/lct_impact_age_resolution $contact_data_dir $subdir_age_resolution_long $tmax

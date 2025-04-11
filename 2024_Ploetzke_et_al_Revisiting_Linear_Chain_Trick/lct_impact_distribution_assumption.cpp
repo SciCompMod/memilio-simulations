@@ -84,68 +84,80 @@ using LctState =
 *   The value for the Recovered compartment is also set according to the reported numbers 
 *   and the number of dead individuals is set to zero.
 *   
+* @param[in] tReff TODO
 * @returns The initial value vector including subcompartments.
 */
-std::vector<ScalarType> get_initial_values()
+std::vector<ScalarType> get_initial_values(ScalarType tReff = 2.)
 {
     using namespace params;
-    using InfState                                 = mio::lsecir::InfectionState;
-    const ScalarType dailyNewTransmissionsReported = (34.1 / 7) * total_population / 100000;
 
-    // Firstly, we calculate an initial value vector without division in subcompartments.
-    // Assume that individuals behave exactly as defined by the epidemiological parameters.
-    std::vector<ScalarType> init_compartments((size_t)InfState::Count);
-    // If the number of daily new transmissions was constant within the last days and individuals remain exactly
-    // the average time in the Exposed compartment, we currently have timeExposed * dailyNewTransmissionsReported individuals.
-    init_compartments[(size_t)InfState::Exposed]            = timeExposed * dailyNewTransmissionsReported;
-    init_compartments[(size_t)InfState::InfectedNoSymptoms] = timeInfectedNoSymptoms * dailyNewTransmissionsReported;
-    // Same argument as for Exposed but we have to take into account the probability to become symptomatic.
-    init_compartments[(size_t)InfState::InfectedSymptoms] =
-        (1 - recoveredPerInfectedNoSymptoms) * timeInfectedSymptoms * dailyNewTransmissionsReported;
-    init_compartments[(size_t)InfState::InfectedSevere] = (1 - recoveredPerInfectedNoSymptoms) *
-                                                          severePerInfectedSymptoms * timeInfectedSevere *
-                                                          dailyNewTransmissionsReported;
-    init_compartments[(size_t)InfState::InfectedCritical] = (1 - recoveredPerInfectedNoSymptoms) *
-                                                            severePerInfectedSymptoms * criticalPerSevere *
-                                                            timeInfectedCritical * dailyNewTransmissionsReported;
-    // Number is from official RKI data as stated above.
-    init_compartments[(size_t)InfState::Recovered] = 275292.;
-    // Set initial Dead compartment to zero for this experiment. This way, we can visualize the new deaths in the simulation time.
-    init_compartments[(size_t)InfState::Dead] = 0.;
-    // Set the number of Susceptibles to the remaining number of people in the population.
-    init_compartments[(size_t)InfState::Susceptible] = total_population;
-    for (size_t i = (size_t)InfState::Exposed; i < (size_t)InfState::Count; i++) {
-        init_compartments[(size_t)InfState::Susceptible] -= init_compartments[i];
-    }
+    if (tReff > 0.) {
+        const ScalarType dailyNewTransmissionsReported = (34.1 / 7) * total_population / 100000;
 
-    // Now, we construct an initial value vector with division in subcompartments.
-    // Compartment sizes are distributed uniformly to the subcompartments.
-    std::vector<ScalarType> initial_value_vector;
-    initial_value_vector.push_back(init_compartments[(size_t)InfState::Susceptible]);
-    for (size_t i = 0; i < LctState::get_num_subcompartments<InfState::Exposed>(); i++) {
-        initial_value_vector.push_back(init_compartments[(size_t)InfState::Exposed] /
-                                       LctState::get_num_subcompartments<InfState::Exposed>());
-    }
-    for (size_t i = 0; i < LctState::get_num_subcompartments<InfState::InfectedNoSymptoms>(); i++) {
-        initial_value_vector.push_back(init_compartments[(size_t)InfState::InfectedNoSymptoms] /
-                                       LctState::get_num_subcompartments<InfState::InfectedNoSymptoms>());
-    }
-    for (size_t i = 0; i < LctState::get_num_subcompartments<InfState::InfectedSymptoms>(); i++) {
-        initial_value_vector.push_back(init_compartments[(size_t)InfState::InfectedSymptoms] /
-                                       LctState::get_num_subcompartments<InfState::InfectedSymptoms>());
-    }
-    for (size_t i = 0; i < LctState::get_num_subcompartments<InfState::InfectedSevere>(); i++) {
-        initial_value_vector.push_back(init_compartments[(size_t)InfState::InfectedSevere] /
-                                       LctState::get_num_subcompartments<InfState::InfectedSevere>());
-    }
-    for (size_t i = 0; i < LctState::get_num_subcompartments<InfState::InfectedCritical>(); i++) {
-        initial_value_vector.push_back(init_compartments[(size_t)InfState::InfectedCritical] /
-                                       LctState::get_num_subcompartments<InfState::InfectedCritical>());
-    }
-    initial_value_vector.push_back(init_compartments[(size_t)InfState::Recovered]);
-    initial_value_vector.push_back(init_compartments[(size_t)InfState::Dead]);
+        // Firstly, we calculate an initial value vector without division in subcompartments.
+        // Assume that individuals behave exactly as defined by the epidemiological parameters.
+        std::vector<ScalarType> init_compartments((size_t)InfState::Count);
+        // If the number of daily new transmissions was constant within the last days and individuals remain exactly
+        // the average time in the Exposed compartment, we currently have timeExposed * dailyNewTransmissionsReported individuals.
+        init_compartments[(size_t)InfState::Exposed] = timeExposed * dailyNewTransmissionsReported;
+        init_compartments[(size_t)InfState::InfectedNoSymptoms] =
+            timeInfectedNoSymptoms * dailyNewTransmissionsReported;
+        // Same argument as for Exposed but we have to take into account the probability to become symptomatic.
+        init_compartments[(size_t)InfState::InfectedSymptoms] =
+            (1 - recoveredPerInfectedNoSymptoms) * timeInfectedSymptoms * dailyNewTransmissionsReported;
+        init_compartments[(size_t)InfState::InfectedSevere] = (1 - recoveredPerInfectedNoSymptoms) *
+                                                              severePerInfectedSymptoms * timeInfectedSevere *
+                                                              dailyNewTransmissionsReported;
+        init_compartments[(size_t)InfState::InfectedCritical] = (1 - recoveredPerInfectedNoSymptoms) *
+                                                                severePerInfectedSymptoms * criticalPerSevere *
+                                                                timeInfectedCritical * dailyNewTransmissionsReported;
+        // Number is from official RKI data as stated above.
+        init_compartments[(size_t)InfState::Recovered] = 275292.;
+        // Set initial Dead compartment to zero for this experiment. This way, we can visualize the new deaths in the simulation time.
+        init_compartments[(size_t)InfState::Dead] = 0.;
+        // Set the number of Susceptibles to the remaining number of people in the population.
+        init_compartments[(size_t)InfState::Susceptible] = total_population;
+        for (size_t i = (size_t)InfState::Exposed; i < (size_t)InfState::Count; i++) {
+            init_compartments[(size_t)InfState::Susceptible] -= init_compartments[i];
+        }
 
-    return initial_value_vector;
+        // Now, we construct an initial value vector with division in subcompartments.
+        // Compartment sizes are distributed uniformly to the subcompartments.
+        std::vector<ScalarType> initial_value_vector;
+        initial_value_vector.push_back(init_compartments[(size_t)InfState::Susceptible]);
+        for (size_t i = 0; i < LctState::get_num_subcompartments<InfState::Exposed>(); i++) {
+            initial_value_vector.push_back(init_compartments[(size_t)InfState::Exposed] /
+                                           LctState::get_num_subcompartments<InfState::Exposed>());
+        }
+        for (size_t i = 0; i < LctState::get_num_subcompartments<InfState::InfectedNoSymptoms>(); i++) {
+            initial_value_vector.push_back(init_compartments[(size_t)InfState::InfectedNoSymptoms] /
+                                           LctState::get_num_subcompartments<InfState::InfectedNoSymptoms>());
+        }
+        for (size_t i = 0; i < LctState::get_num_subcompartments<InfState::InfectedSymptoms>(); i++) {
+            initial_value_vector.push_back(init_compartments[(size_t)InfState::InfectedSymptoms] /
+                                           LctState::get_num_subcompartments<InfState::InfectedSymptoms>());
+        }
+        for (size_t i = 0; i < LctState::get_num_subcompartments<InfState::InfectedSevere>(); i++) {
+            initial_value_vector.push_back(init_compartments[(size_t)InfState::InfectedSevere] /
+                                           LctState::get_num_subcompartments<InfState::InfectedSevere>());
+        }
+        for (size_t i = 0; i < LctState::get_num_subcompartments<InfState::InfectedCritical>(); i++) {
+            initial_value_vector.push_back(init_compartments[(size_t)InfState::InfectedCritical] /
+                                           LctState::get_num_subcompartments<InfState::InfectedCritical>());
+        }
+        initial_value_vector.push_back(init_compartments[(size_t)InfState::Recovered]);
+        initial_value_vector.push_back(init_compartments[(size_t)InfState::Dead]);
+        return initial_value_vector;
+    }
+    else {
+        std::vector<ScalarType> initial_value_vector(LctState::Count, 0.);
+        initial_value_vector[LctState::get_first_index<InfState::Susceptible>()] = total_population - 500.;
+        for (size_t i = 0; i < LctState::get_num_subcompartments<InfState::Exposed>(); i++) {
+            initial_value_vector[LctState::get_first_index<InfState::Exposed>() + i] =
+                500. / LctState::get_num_subcompartments<InfState::Exposed>();
+        }
+        return initial_value_vector;
+    }
 }
 
 /** 
@@ -225,7 +237,7 @@ mio::IOResult<void> simulate(ScalarType Reff, ScalarType tReff, ScalarType tmax,
     model.parameters.get<mio::lsecir::Seasonality>()     = seasonality;
 
     // Set initial values.
-    std::vector<ScalarType> initial_values = get_initial_values();
+    std::vector<ScalarType> initial_values = get_initial_values(tReff);
     for (size_t i = 0; i < model.populations.get_num_compartments(); i++) {
         model.populations[i] = initial_values[i];
     }
