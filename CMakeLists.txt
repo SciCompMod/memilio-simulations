@@ -11,7 +11,7 @@ option(BUILD_2024_Ploetzke_et_al_Revisiting "Build simulations from folder 2024_
 option(BUILD_2024_Wendler_et_al_Nonstandard "Build simulations from folder 2024_Wendler_et_al_Nonstandard_Numerical_Scheme_IDE." OFF)
 option(BUILD_munich_graph_sim "Build simulations from folder munich_graph_sim." OFF)
 
-# We require the library hdf5 for all targets.
+# HDF5 is required for many targets.
 find_package(HDF5)
 
 if(HDF5_FOUND)

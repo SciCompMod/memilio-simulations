@@ -33,6 +33,20 @@
 #include <vector>
 #include <omp.h>
 
+// This block enables compilation of the code with and without LIKWID in place
+#ifdef LIKWID_PERFMON
+#include <likwid-marker.h>
+#else
+#define LIKWID_MARKER_INIT
+#define LIKWID_MARKER_THREADINIT
+#define LIKWID_MARKER_SWITCH
+#define LIKWID_MARKER_REGISTER(regionTag)
+#define LIKWID_MARKER_START(regionTag)
+#define LIKWID_MARKER_STOP(regionTag)
+#define LIKWID_MARKER_CLOSE
+#define LIKWID_MARKER_GET(regionTag, nevents, events, time, count)
+#endif
+
 namespace params
 {
 // num_subcompartments is used as a template argument and has to be a constexpr.
@@ -74,6 +88,7 @@ const ScalarType deathsPerCritical                = 0.21718;
 */
 void simulate(size_t num_runs, size_t num_warm_up_runs, ScalarType tmax, bool use_adaptive_solver = false)
 {
+    LIKWID_MARKER_INIT;
     using namespace params;
     std::cout << "{ \"Subcompartments\": " << num_subcompartments << ", " << std::endl;
     // Initialize (non-age-resolved) LCT model.
@@ -139,13 +154,17 @@ void simulate(size_t num_runs, size_t num_warm_up_runs, ScalarType tmax, bool us
 
     // Runs with timing.
     ScalarType total = 0;
+    LIKWID_MARKER_REGISTER("foo");
     for (size_t i = 0; i < num_runs; i++) {
+        LIKWID_MARKER_START("foo");
         total -= omp_get_wtime();
         mio::simulate<ScalarType, Model>(0, tmax, dt, model, integrator);
         total += omp_get_wtime();
+        LIKWID_MARKER_STOP("foo");
     }
     std::cout << "\"Time\": " << total / num_runs << "\n}," << std::endl;
     mio::set_log_level(mio::LogLevel::warn);
+    LIKWID_MARKER_CLOSE;
 }
 
 /**
