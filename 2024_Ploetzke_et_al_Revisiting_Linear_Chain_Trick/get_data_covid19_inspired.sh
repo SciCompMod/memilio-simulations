@@ -23,7 +23,8 @@ RelativeTransmissionNoSymptoms=1.
 RiskOfInfectionFromSymptomatic=0.3
 month_oct=10
 day_oct=1
-scale_contacts_oct=0.6537
+scale_contacts_oct=0.6072 #28.9.: 0.4060 #29.9.: 0.6048 #30.9.: 0.6318 #2.10.: 0.6422 #3.10.: 0.6580 #4.10.:0.5565
+ #1.10.: 0.6537 #1.10._ma7:0.6072
 npi_size_oct=0.3
 scale_confirmed_cases_oct=1.2
 

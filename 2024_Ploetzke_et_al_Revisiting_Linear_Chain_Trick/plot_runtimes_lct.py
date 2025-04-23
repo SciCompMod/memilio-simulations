@@ -84,7 +84,8 @@ def plot_runtime(json_file, file_name=''):
     plt.plot(df["Subcompartments"], df["Time"],
              linestyle='--', marker='o', linewidth=1.2)
     plt.ylim(bottom=0.)
-    plt.xlim(left=0., right=df["Subcompartments"].max()+1)
+    plt.xlim(left=df["Subcompartments"].min()-1,
+             right=df["Subcompartments"].max()+1)
     plt.xlabel('Number of subcompartments', fontsize=fontsize_labels)
     plt.ylabel('Run time [seconds]', fontsize=fontsize_labels)
     plt.yticks(fontsize=fontsize_legends)
@@ -155,7 +156,7 @@ def main():
         __file__), "simulation_results", "lct_runtimes")
 
     # Define which figures of the paper should be created.
-    figures = ['left', 'center', 'right']
+    figures = ['add']
     if 'left' in figures:
         file_name = 'lct_runtime_subcompartments100'
         paths_to_file = os.path.join(result_dir, file_name)
@@ -171,6 +172,31 @@ def main():
         paths_to_file = os.path.join(result_dir, file_name)
         extract_json_segments(paths_to_file+'.txt', paths_to_file+'.json')
         plot_runtime_and_steps(paths_to_file+'.json', file_name)
+    if 'add' in figures:
+        file_name = '100-2000withopt0'
+        paths_to_file = os.path.join(result_dir, file_name)
+        extract_json_segments(paths_to_file+'.txt', paths_to_file+'.json')
+        plot_runtime(paths_to_file+'.json', file_name)
+        file_name = '100-2000withoptmax_run2'
+        paths_to_file = os.path.join(result_dir, file_name)
+        extract_json_segments(paths_to_file+'.txt', paths_to_file+'.json')
+        plot_runtime(paths_to_file+'.json', file_name)
+        file_name = '1-100withoptmax_run2'
+        paths_to_file = os.path.join(result_dir, file_name)
+        extract_json_segments(paths_to_file+'.txt', paths_to_file+'.json')
+        plot_runtime(paths_to_file+'.json', file_name)
+        file_name = '1-100opt0run1'
+        paths_to_file = os.path.join(result_dir, file_name)
+        extract_json_segments(paths_to_file+'.txt', paths_to_file+'.json')
+        plot_runtime(paths_to_file+'.json', file_name)
+        file_name = '400-600optmax'
+        paths_to_file = os.path.join(result_dir, file_name)
+        extract_json_segments(paths_to_file+'.txt', paths_to_file+'.json')
+        plot_runtime(paths_to_file+'.json', file_name)
+        file_name = '400-600opt0'
+        paths_to_file = os.path.join(result_dir, file_name)
+        extract_json_segments(paths_to_file+'.txt', paths_to_file+'.json')
+        plot_runtime(paths_to_file+'.json', file_name)
 
 
 if __name__ == "__main__":

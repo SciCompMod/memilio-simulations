@@ -255,14 +255,14 @@ def plot_InfectedSymptoms_or_Deaths(files, datafile, start_date, tmax, scale_con
                     "Expected a different number of compartments.")
             # Plot result.
             plt.plot(dates, total[:, compartment_idx],
-                     linewidth=1.2, linestyle="solid", linestyle=linestyle_dict[legendplot[1+file]], color=color_dict[legend_labels[1+file]])
+                     linewidth=1.2, linestyle=linestyle_dict[legend_labels[1+file]], color=color_dict[legend_labels[1+file]])
         else:
             if (total.shape[1] != len(secir_dict)*len(Age_RKI_names)):
                 raise gd.DataError(
                     "Expected a different number of compartments.")
             # Plot result.
             plt.plot(dates, total[:, len(secir_dict) * age_group + compartment_idx],
-                     linewidth=1.2, linestyle="solid", linestyle=linestyle_dict[legendplot[1+file]], color=color_dict[legend_labels[1+file]])
+                     linewidth=1.2, linestyle=linestyle_dict[legend_labels[1+file]], color=color_dict[legend_labels[1+file]])
 
         h5file.close()
 
@@ -337,7 +337,7 @@ def plot_InfectedCritical(files, datafile, start_date, tmax, legend_labels, file
                 "Expected a different number of compartments.")
         # Plot result.
         plt.plot(dates, total[:, compartment_idx],
-                 linewidth=1.2,linestyle=linestyle_dict[legendplot[1+file]], color=color_dict[legend_labels[1+file]])
+                 linewidth=1.2, linestyle=linestyle_dict[legend_labels[1+file]], color=color_dict[legend_labels[1+file]])
         h5file.close()
 
     plt.xlabel("Date", fontsize=fontsize_labels)
@@ -396,6 +396,16 @@ def plot_daily_new_transmissions(files, datafile, start_date, tmax, scale_confir
                  linestyle='None', color='grey', marker='x', markersize=5)
         print("Daily new transmissions at the first day of RKI data is: " +
               f"{data_rki.loc[start_date]['DailyNewTransmissions']}")
+
+        # Also print mean daily new transmissions of the surrounding 3 days (ma7)
+        filtered_data = load_rki_data(
+            datafile, start_date + pd.DateOffset(days=-3), 6, scale_confirmed_cases)
+        filtered_data = filtered_data.drop(columns=['Age_RKI'])
+        filtered_data = filtered_data.groupby(['Date']).sum()
+        average_daily_new_transmissions = filtered_data['DailyNewTransmissions'].mean(
+        )
+        print("Average daily new transmissions +-3 days around first simulation day (ma7) " +
+              f"{average_daily_new_transmissions}")
     else:
         # Age-resolved.
         plt.plot(range(num_days), data_rki['DailyNewTransmissions'][(data_rki['Age_RKI'] == Age_RKI_names[age_group])],
@@ -430,7 +440,7 @@ def plot_daily_new_transmissions(files, datafile, start_date, tmax, scale_confir
         # Plot result.
         if legend_labels[file] in color_dict:
             plt.plot(dates[1:], incidence, linewidth=1.2,
-                     linestyle=linestyle_dict[legendplot[1+file]],color=color_dict[legend_labels[1+file]])
+                     linestyle=linestyle_dict[legend_labels[1+file]], color=color_dict[legend_labels[1+file]])
         else:
             plt.plot(dates[1:], incidence, linewidth=1.2)
         h5file.close()
@@ -490,8 +500,9 @@ def main():
 
     start_date = '2020-10-1'
     start_date_timestamp = pd.Timestamp(start_date)
-    scale_confirmed_cases = 1
+    scale_confirmed_cases = 1.2
     tmax = 45
+    filenameending = "_ma7"
 
     # Define which subfigures of Figure 16 of the paper should be created.
     figures = ['topleft', 'topright', 'bottomleft', 'bottomright']
@@ -507,7 +518,7 @@ def main():
                                      path_to_rki_data, start_date_timestamp, tmax, scale_confirmed_cases,
                                      legend_labels=list(
             ["Extrapolated RKI data", "ODE", "LCT3", "LCT10", "LCT50", "LCTvar"]),
-            file_name="real_new_infections_"+start_date+"_allage")
+            file_name="real_new_infections_"+start_date+"_allage"+filenameending)
     if 'topright' in figures:
         plot_InfectedSymptoms_or_Deaths([get_file_name(simulation_data_dir, start_date, 1),
                                          get_file_name(
@@ -518,7 +529,7 @@ def main():
             simulation_data_dir, start_date, 50),
             get_file_name(simulation_data_dir, start_date, 0)],
             path_to_rki_data, start_date_timestamp, tmax, scale_confirmed_cases, list(
-            ["Extrapolated RKI data", "ODE", "LCT3", "LCT10", "LCT50", "LCTvar"]), plot_deaths=False, file_name="real_infected_"+start_date+"_allage")
+            ["Extrapolated RKI data", "ODE", "LCT3", "LCT10", "LCT50", "LCTvar"]), plot_deaths=False, file_name="real_infected_"+start_date+"_allage"+filenameending)
     if 'bottomleft' in figures:
         plot_InfectedCritical([get_file_name(simulation_data_dir, start_date, 1),
                                get_file_name(simulation_data_dir,
@@ -530,7 +541,7 @@ def main():
                                get_file_name(simulation_data_dir, start_date, 0)],
                               path_to_divi_data, start_date_timestamp, tmax,  list(
             ["Extrapolated RKI data", "ODE", "LCT3", "LCT10", "LCT50", "LCTvar"]),
-            file_name="real_icu_"+start_date+"_allage")
+            file_name="real_icu_"+start_date+"_allage"+filenameending)
     if 'bottomright' in figures:
         plot_InfectedSymptoms_or_Deaths([get_file_name(simulation_data_dir, start_date, 1),
                                          get_file_name(
@@ -541,7 +552,7 @@ def main():
                                         path_to_rki_data, start_date_timestamp, tmax, scale_confirmed_cases,
                                         list(["Extrapolated RKI data", "ODE",
                                              "LCT3", "LCT10", "LCT50", "LCTvar"]),
-                                        plot_deaths=True, file_name="real_deaths_"+start_date+"_allage")
+                                        plot_deaths=True, file_name="real_deaths_"+start_date+"_allage"+filenameending)
 
 
 if __name__ == "__main__":

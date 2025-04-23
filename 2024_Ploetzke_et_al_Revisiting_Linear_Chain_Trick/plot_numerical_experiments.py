@@ -708,42 +708,6 @@ def main():
         print("Peak number of daily new transmissions of A80+ scenario: " +
               f"{b}")
 
-    if 20 in figures:
-        folder = os.path.join(result_dir, "dropReff40")
-        plot_rel_deviation(get_file_name(folder, 0.5, 2, 1), [get_file_name(folder, 0.5, 2, 3),
-                                                              get_file_name(folder, 0.5, 2, 10), get_file_name(folder, 0.5, 2, 50), get_file_name(folder, 0.5, 2, 0)],
-                           legend_labels=list(
-            ["LCT3", "LCT10", "LCT50", "LCTvar"]), compartment_idx=-1,
-            file_name="new_infections_drophalf_reldeviation")
-        plot_rel_deviation(get_file_name(folder, 0.5, 2, 1), [get_file_name(folder, 0.5, 2, 3),
-                                                              get_file_name(folder, 0.5, 2, 10), get_file_name(folder, 0.5, 2, 50), get_file_name(folder, 0.5, 2, 0)],
-                           legend_labels=list(
-            ["LCT3", "LCT10", "LCT50", "LCTvar"]), compartment_idx=2,
-            file_name="carrier_compartment_drophalf_reldeviation")
-
-        plot_rel_deviation(get_file_name(folder, 0.5, 2, 1), [get_file_name(folder, 0.5, 2, 3),
-                                                              get_file_name(folder, 0.5, 2, 10), get_file_name(folder, 0.5, 2, 50), get_file_name(folder, 0.5, 2, 0)],
-                           legend_labels=list(
-            ["LCT3", "LCT10", "LCT50", "LCTvar"]), compartment_idx=3,
-            file_name="carrier_compartment_drophalf_reldeviation")
-
-        folder = os.path.join(result_dir, "riseReffTo2_40")
-        plot_rel_deviation(get_file_name(folder, 2, 2, 1), [get_file_name(folder, 2, 2, 3),
-                                                            get_file_name(folder, 2, 2, 10), get_file_name(folder, 2,  2, 50), get_file_name(folder, 2,  2, 0)],
-                           legend_labels=list(
-            ["LCT3", "LCT10", "LCT50", "LCTvar"]), compartment_idx=-1,
-            file_name="new_infections_rise2_reldeviation")
-        plot_rel_deviation(get_file_name(folder, 2, 2, 1), [get_file_name(folder, 2, 2, 3),
-                                                            get_file_name(folder, 2, 2, 10), get_file_name(folder, 2, 2, 50), get_file_name(folder, 2, 2, 0)],
-                           legend_labels=list(
-            ["LCT3", "LCT10", "LCT50", "LCTvar"]), compartment_idx=2,
-            file_name="carrier_compartment_rise2_reldeviation")
-        plot_rel_deviation(get_file_name(folder, 2, 2, 1), [get_file_name(folder, 2, 2, 3),
-                                                            get_file_name(folder, 2, 2, 10), get_file_name(folder, 2, 2, 50), get_file_name(folder, 2, 2, 0)],
-                           legend_labels=list(
-            ["LCT3", "LCT10", "LCT50", "LCTvar"]), compartment_idx=3,
-            file_name="infected_compartment_rise2_reldeviation")
-
 
 if __name__ == "__main__":
     main()

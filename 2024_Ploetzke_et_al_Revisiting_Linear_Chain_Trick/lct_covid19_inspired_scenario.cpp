@@ -182,7 +182,7 @@ mio::IOResult<mio::UncertainContactMatrix<ScalarType>> get_contact_matrix(std::s
         contact_matrices[size_t(contact_location.first)].get_minimum()  = Eigen::MatrixXd::Zero(num_groups, num_groups);
     }
 
-    // auto offset_npi = mio::SimulationTime(mio::get_offset_in_days(mio::Date(2020, 10, 2), start_date));
+    // auto offset_npi = mio::SimulationTime(mio::get_offset_in_days(mio::Date(2020, 10, 1), start_date));
     // for (auto&& contact_location : contact_locations) {
     //     contact_matrices[size_t(contact_location.first)].add_damping(
     //         Eigen::MatrixXd::Constant(num_groups, num_groups, 0.), offset_npi - mio::SimulationTime(0.5));
