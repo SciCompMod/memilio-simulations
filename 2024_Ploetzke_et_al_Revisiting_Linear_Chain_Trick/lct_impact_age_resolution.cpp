@@ -253,13 +253,18 @@ mio::IOResult<void> simulation_with_ageresolution(size_t agegroup_exposed, Scala
     integrator->set_dt_min(dt);
     integrator->set_dt_max(dt);
     mio::TimeSeries<ScalarType> result = mio::simulate<ScalarType, Model>(0, tmax, dt, model, integrator);
-    // Calculate result without division in subcompartments and without division in age groups.
-    mio::TimeSeries<ScalarType> populations = sum_age_groups(model.calculate_compartments(result));
 
     if (!save_dir.empty()) {
+        // Calculate result without division in subcompartments and without division in age groups.
+        mio::TimeSeries<ScalarType> populations = sum_age_groups(model.calculate_compartments(result));
         std::string filename = save_dir + "lct_ageresolved_subcomp" + std::to_string(num_subcompartments) +
                                "_agegroupinit" + std::to_string(agegroup_exposed) + ".h5";
         mio::IOResult<void> save_result_status = mio::save_result({populations}, {0}, 1, filename);
+        // Save result with age groups.
+        populations = model.calculate_compartments(result);
+        filename    = save_dir + "lct_ageresolved_subcomp" + std::to_string(num_subcompartments) + "_agegroupinit" +
+                   std::to_string(agegroup_exposed) + "_ageresolved.h5";
+        save_result_status = mio::save_result({populations}, {0}, 1, filename);
     }
 
     return mio::success();
@@ -385,14 +390,13 @@ int main(int argc, char** argv)
         contact_data_dir = argv[1];
     }
 
-    // Simulation with initial exposed population in age group 0.
-    auto result = simulation_with_ageresolution(0, tmax, contact_data_dir, save_dir);
+    auto result = simulation_with_ageresolution(2, tmax, contact_data_dir, save_dir);
     if (!result) {
         printf("%s\n", result.error().formatted_message().c_str());
         return -1;
     }
     // Simulation with initial exposed population in other age groups.
-    for (size_t i = 1; i < params::num_groups; i++) {
+    for (size_t i : {5}) {
         result = simulation_with_ageresolution(i, tmax, contact_data_dir, save_dir);
         if (!result) {
             printf("%s\n", result.error().formatted_message().c_str());

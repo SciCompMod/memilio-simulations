@@ -221,7 +221,7 @@ mio::IOResult<void> simulate(ScalarType Reff, ScalarType tReff, ScalarType tmax,
     if (Reff <= 1.) {
         // Perform a simulation with a decrease in the effective reproduction number on day 2.
         contact_matrix[0] = mio::ContactMatrix(Eigen::MatrixXd::Constant(1, 1, contacts_R1));
-        //This is necessary as otherwise, the damping is implemented over a time span instead of a break.
+        // This is necessary as otherwise, the damping is implemented over a time span instead of a break.
         contact_matrix[0].add_damping(0., mio::SimulationTime(tReff - 0.1));
         contact_matrix[0].add_damping(Reff, mio::SimulationTime(tReff));
     }

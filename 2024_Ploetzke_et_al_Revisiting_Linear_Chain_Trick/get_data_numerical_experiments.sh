@@ -21,9 +21,17 @@ subdir_dropReff="$result_dir/dropReff/"
 if [ ! -d "$subdir_dropReff" ]; then
     mkdir "$subdir_dropReff"
 fi
+subdir_dropReff40="$result_dir/dropReff40/"
+if [ ! -d "$subdir_dropReff40" ]; then
+    mkdir "$subdir_dropReff40"
+fi
 subdir_riseReffTo2short="$result_dir/riseReffTo2short/"
 if [ ! -d "$subdir_riseReffTo2short" ]; then
     mkdir "$subdir_riseReffTo2short"
+fi
+subdir_riseReffTo2_40="$result_dir/riseReffTo2_40/"
+if [ ! -d "$subdir_riseReffTo2_40" ]; then
+    mkdir "$subdir_riseReffTo2_40"
 fi
 subdir_riseReffTo2shortTEhalved="$result_dir/riseReffTo2shortTEhalved/"
 if [ ! -d "$subdir_riseReffTo2shortTEhalved" ]; then
@@ -41,6 +49,8 @@ do
     tReff=2.
     simulation_days=12
     ./bin/lct_impact_distribution_assumption $Reff $tReff $simulation_days $subdir_dropReff
+    simulation_days=40
+    ./bin/lct_impact_distribution_assumption $Reff $tReff $simulation_days $subdir_dropReff40
 
     # Second case: Increase the effective reproduction number at simulation day 2 to 2 and simulate for 12 days.
     Reff=2.
@@ -51,6 +61,8 @@ do
         ./bin/lct_impact_distribution_assumption $Reff $tReff $simulation_days $subdir_riseReffTo2short 1
     fi
     ./bin/lct_impact_distribution_assumption $Reff $tReff $simulation_days $subdir_riseReffTo2short
+    simulation_days=40
+    ./bin/lct_impact_distribution_assumption $Reff $tReff $simulation_days $subdir_riseReffTo2_40
 
     # Third case: Second case but with TimeExposed scaled by 0.5. Exclude Lct Var.
     if [ "$num_subcomp" -ne 0 ]; then 

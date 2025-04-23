@@ -55,13 +55,18 @@ RecoveredPerInfectedNoSymptoms = [
 age_group_sizes = [3969138.0, 7508662, 18921292, 28666166, 18153339, 5936434]
 
 # Define color to be used while plotting for different models to make plots consistent.
-color_dict = {'ODE': '#1f77b4',
-              'LCT3': '#2ca02c',
-              'LCT10': '#ff7f0e',
-              'LCT20': '#9467bd',
-              'LCT50':  '#e377c2',
-              'LCTvar':  '#bbf90f',
+color_dict = {'ODE': 'C0',
+              'LCT3': 'C1',
+              'LCT10': 'C2',
+              'LCT50':  'C3',
+              'LCTvar':  'C4',
               }
+linestyle_dict = {'ODE': 'solid',
+                  'LCT3': 'solid',
+                  'LCT10': 'solid',
+                  'LCT50':  'solid',
+                  'LCTvar':  'dashed',
+                  }
 fontsize_labels = 14
 fontsize_legends = 11
 plotfolder = 'Plots/Plots_covid19'
@@ -250,14 +255,14 @@ def plot_InfectedSymptoms_or_Deaths(files, datafile, start_date, tmax, scale_con
                     "Expected a different number of compartments.")
             # Plot result.
             plt.plot(dates, total[:, compartment_idx],
-                     linewidth=1.2, linestyle="solid", color=color_dict[legend_labels[1+file]])
+                     linewidth=1.2, linestyle="solid", linestyle=linestyle_dict[legendplot[1+file]], color=color_dict[legend_labels[1+file]])
         else:
             if (total.shape[1] != len(secir_dict)*len(Age_RKI_names)):
                 raise gd.DataError(
                     "Expected a different number of compartments.")
             # Plot result.
             plt.plot(dates, total[:, len(secir_dict) * age_group + compartment_idx],
-                     linewidth=1.2, linestyle="solid", color=color_dict[legend_labels[1+file]])
+                     linewidth=1.2, linestyle="solid", linestyle=linestyle_dict[legendplot[1+file]], color=color_dict[legend_labels[1+file]])
 
         h5file.close()
 
@@ -332,7 +337,7 @@ def plot_InfectedCritical(files, datafile, start_date, tmax, legend_labels, file
                 "Expected a different number of compartments.")
         # Plot result.
         plt.plot(dates, total[:, compartment_idx],
-                 linewidth=1.2, linestyle="solid", color=color_dict[legend_labels[1+file]])
+                 linewidth=1.2,linestyle=linestyle_dict[legendplot[1+file]], color=color_dict[legend_labels[1+file]])
         h5file.close()
 
     plt.xlabel("Date", fontsize=fontsize_labels)
@@ -425,7 +430,7 @@ def plot_daily_new_transmissions(files, datafile, start_date, tmax, scale_confir
         # Plot result.
         if legend_labels[file] in color_dict:
             plt.plot(dates[1:], incidence, linewidth=1.2,
-                     linestyle="solid", color=color_dict[legend_labels[1+file]])
+                     linestyle=linestyle_dict[legendplot[1+file]],color=color_dict[legend_labels[1+file]])
         else:
             plt.plot(dates[1:], incidence, linewidth=1.2)
         h5file.close()
@@ -485,7 +490,7 @@ def main():
 
     start_date = '2020-10-1'
     start_date_timestamp = pd.Timestamp(start_date)
-    scale_confirmed_cases = 1.2
+    scale_confirmed_cases = 1
     tmax = 45
 
     # Define which subfigures of Figure 16 of the paper should be created.

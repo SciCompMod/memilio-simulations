@@ -43,13 +43,18 @@ secir_dict = {0: 'Susceptible', 1: 'Exposed', 2: 'Carrier', 3: 'Infected', 4: 'H
               5: 'ICU', 6: 'Recovered', 7: 'Dead'}
 
 # Define color to be used while plotting for different models to make plots consistent.
-color_dict = {'ODE': '#1f77b4',
-              'LCT3': '#2ca02c',
-              'LCT10': '#ff7f0e',
-              'LCT20': '#9467bd',
-              'LCT50':  '#e377c2',
-              'LCTvar':  '#bbf90f',
+color_dict = {'ODE': 'C0',
+              'LCT3': 'C1',
+              'LCT10': 'C2',
+              'LCT50':  'C3',
+              'LCTvar':  'C4',
               }
+linestyle_dict = {'ODE': 'solid',
+                  'LCT3': 'solid',
+                  'LCT10': 'solid',
+                  'LCT50':  'solid',
+                  'LCTvar':  'dashed',
+                  }
 fontsize_labels = 14
 fontsize_legends = 14
 plotfolder = 'Plots/Plots_numerical_experiments'
@@ -95,7 +100,7 @@ def plot_compartments(files, legend_labels, file_name="", compartment_indices=ra
             if legend_labels[file] in color_dict:
                 axs[up_down, left_right].plot(dates,
                                               total[:, i], label=legend_labels[file], linewidth=1.2,
-                                              linestyle="solid",
+                                              linestyle=linestyle_dict[legend_labels[file]],
                                               color=color_dict[legend_labels[file]])
             else:
                 axs[up_down, left_right].plot(dates,
@@ -132,6 +137,90 @@ def plot_compartments(files, legend_labels, file_name="", compartment_indices=ra
     if file_name:
         fig.savefig(plotfolder+'/'+file_name+'.png',
                     bbox_extra_artists=(lgd,),  bbox_inches='tight', dpi=500)
+    plt.close()
+
+
+def plot_rel_deviation(ode_filename, files, legend_labels,  compartment_idx=1, file_name=""):
+    """ Creates a plot of the simulation results for one specified compartment. 
+    The result should consist of accumulated numbers for subcompartments.
+    This function can be used to compare the size of one specific compartment for different simulation results,
+    e.g., obtained with different models or different parameter specifications.
+
+
+    @param[in] files: List of paths to files (without .h5 extension) containing simulation results to be plotted.
+         Results should contain exactly 8 compartments (so use accumulated numbers for LCT models). 
+    @param[in] legend_labels: List of names for the results to be used for the plot legend.
+    @param[in] compartment_idx: The index of the compartment to be plotted.
+    @param[in] file_name: The name of the file where the plot will be saved.
+            If an empty string is provided, the plot will not be saved.
+    """
+    plt.figure(file_name)
+    # Load ode data.
+    h5file = h5py.File(str(ode_filename) + '.h5', 'r')
+    data_ode = h5file[list(h5file.keys())[0]]
+    dates_ode = data_ode['Time'][:]
+    # As there should be only one Group, total is the simulation result.
+    total_ode = data_ode['Total'][:, :]
+    if compartment_idx == -1:
+        result_ode = (
+            total_ode[:-1, 0]-total_ode[1:, 0])/(dates_ode[1:]-dates_ode[:-1])
+    else:
+        result_ode = total_ode[:, compartment_idx]
+
+    # Add simulation results to plot.
+    for file in range(len(files)):
+        # Load data.
+        h5file = h5py.File(str(files[file]) + '.h5', 'r')
+
+        if (len(list(h5file.keys())) > 1):
+            raise gd.DataError("File should contain one dataset.")
+        if (len(list(h5file[list(h5file.keys())[0]].keys())) > 3):
+            raise gd.DataError("Expected only one group.")
+
+        data = h5file[list(h5file.keys())[0]]
+        dates = data['Time'][:]
+        # As there should be only one Group, total is the simulation result.
+        total = data['Total'][:, :]
+        if (total.shape[1] != 8):
+            raise gd.DataError(
+                "Expected a different number of compartments.")
+
+        # Plot result.
+        if compartment_idx == -1:
+            result = (
+                total[:-1, 0]-total[1:, 0])/(dates[1:]-dates[:-1])
+        else:
+            result = total[:, compartment_idx]
+
+        if legend_labels[file] in color_dict:
+            if compartment_idx == -1:
+                plt.plot(dates[1:], (result-result_ode)/result_ode, linewidth=1.2,
+                         linestyle=linestyle_dict[legend_labels[file]], color=color_dict[legend_labels[file]])
+            else:
+                plt.plot(dates, (result-result_ode)/result_ode, linewidth=1.2,
+                         linestyle=linestyle_dict[legend_labels[file]], color=color_dict[legend_labels[file]])
+        else:
+            if compartment_idx == -1:
+                plt.plot(dates[1:], (result-result_ode) /
+                         result_ode, linewidth=1.2)
+            else:
+                plt.plot(dates, (result-result_ode)/result_ode, linewidth=1.2)
+
+        h5file.close()
+
+    plt.xlabel('Simulation time [days]', fontsize=fontsize_labels)
+    plt.yticks(fontsize=9)
+    plt.ylabel('Relative deviation from ODE model result',
+               fontsize=fontsize_labels)
+    plt.xlim(left=0, right=dates[-1])
+    plt.legend(legend_labels, fontsize=fontsize_legends, framealpha=0.5)
+    plt.grid(True, linestyle='--')
+    plt.tight_layout()
+
+    # Save result.
+    if file_name:
+        plt.savefig(plotfolder+'/'+file_name +
+                    '.png', bbox_inches='tight', dpi=500)
     plt.close()
 
 
@@ -172,7 +261,7 @@ def plot_single_compartment(files, legend_labels,  compartment_idx=1, file_name=
         # Plot result.
         if legend_labels[file] in color_dict:
             plt.plot(dates, total[:, compartment_idx], linewidth=1.2,
-                     linestyle="solid", color=color_dict[legend_labels[file]])
+                     linestyle=linestyle_dict[legend_labels[file]], color=color_dict[legend_labels[file]])
         else:
             plt.plot(dates, total[:, compartment_idx], linewidth=1.2)
 
@@ -309,7 +398,7 @@ def plot_epidemic_peak_size(func_get_file_name, Reffs, subcompartments, file_nam
                  label=str(Reff))
 
     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=10,
-               title="$\\mathcal{R}_{\\text{eff}}(2)\\approx$", title_fontsize=11)
+               title="$\\mathcal{R}_{\\text{eff}}(0)\\approx$", title_fontsize=11)
     plt.ylim(bottom=0)
     plt.xlabel('Number of subcompartments', fontsize=fontsize_labels)
     plt.ylabel('Maximum daily new transmissions', fontsize=fontsize_labels)
@@ -371,7 +460,7 @@ def plot_epidemic_peak_timing(func_get_file_name, Reffs, subcompartments, file_n
                  label=str(Reff))
 
     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=10,
-               title="$\\mathcal{R}_{\\text{eff}}(2)\\approx$", title_fontsize=11)
+               title="$\\mathcal{R}_{\\text{eff}}(0)\\approx$", title_fontsize=11)
     plt.ylim(bottom=0)
     plt.xlabel('Number of subcompartments', fontsize=fontsize_labels)
     plt.ylabel('Simulation day of peak [days]', fontsize=fontsize_labels)
@@ -444,7 +533,7 @@ def plot_daily_new_transmissions(files, legend_labels, file_name="", tmax=0):
         # Plot result.
         if legend_labels[file] in color_dict:
             plt.plot(dates[1:], daily_new_transmissions, linewidth=1.2,
-                     linestyle="solid", color=color_dict[legend_labels[file]])
+                     linestyle=linestyle_dict[legend_labels[file]], color=color_dict[legend_labels[file]])
         else:
             plt.plot(dates[1:], daily_new_transmissions, linewidth=1.2)
 
@@ -495,7 +584,7 @@ def main():
         __file__), "simulation_results", "simulation_lct_numerical_experiments")
 
     # Define which figures of the paper should be created. Figure 12 is created with another python script.
-    figures = list(range(3, 12)) + [13]
+    figures = list(range(3, 12)) + [13] + [20]
 
     if 3 in figures:
         folder = os.path.join(result_dir, "dropReff")
@@ -597,21 +686,63 @@ def main():
             file_name="compartments_rise2_long")
     if 13 in figures:
         folder = os.path.join(result_dir, "age_resolution_short")
-        plot_compartments([os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit0"), os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit1"), os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit2"),
-                           os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit3"), os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit4"), os.path.join(
-            folder, "lct_ageresolved_subcomp10_agegroupinit5"),
-            os.path.join(folder, "lct_nonageresolved_subcomp10")],
-            legend_labels=list(
-            ["A0–4", "A5–14", "A15–34", "A35–59", "A60–79", "A80+", "Non age-resolved"]),
+        plot_compartments([
+            os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit2"), os.path.join(
+                folder, "lct_ageresolved_subcomp10_agegroupinit5"),
+            os.path.join(folder, "lct_nonageresolved_subcomp10")], legend_labels=list(
+            ["A15–34 scenario", "A80+ scenario", "Non age-resolved scenario"]),
             file_name="compartments_agevsnoage_short")
         folder = os.path.join(result_dir, "age_resolution_long")
-        plot_compartments([os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit0"), os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit1"), os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit2"),
-                           os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit3"), os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit4"), os.path.join(
-            folder, "lct_ageresolved_subcomp10_agegroupinit5"),
-            os.path.join(folder, "lct_nonageresolved_subcomp10")],
-            legend_labels=list(
-            ["A0–4", "A5–14", "A15–34", "A35–59", "A60–79", "A80+", "Non age-resolved"]),
+        plot_compartments([os.path.join(folder, "lct_ageresolved_subcomp10_agegroupinit2"),
+                           os.path.join(
+                               folder, "lct_ageresolved_subcomp10_agegroupinit5"),
+                           os.path.join(folder, "lct_nonageresolved_subcomp10")], legend_labels=list(
+            ["A15–34 scenario", "A80+ scenario", "Non age-resolved scenario"]),
             file_name="compartments_agevsnoage_long")
+        a = get_epidemic_peak_size(os.path.join(
+            folder, "lct_ageresolved_subcomp10_agegroupinit2"))
+        print("Peak number of daily new transmissions of A15-34 scenario: " +
+              f"{a}")
+        b = get_epidemic_peak_size(os.path.join(
+            folder, "lct_ageresolved_subcomp10_agegroupinit5"))
+        print("Peak number of daily new transmissions of A80+ scenario: " +
+              f"{b}")
+
+    if 20 in figures:
+        folder = os.path.join(result_dir, "dropReff40")
+        plot_rel_deviation(get_file_name(folder, 0.5, 2, 1), [get_file_name(folder, 0.5, 2, 3),
+                                                              get_file_name(folder, 0.5, 2, 10), get_file_name(folder, 0.5, 2, 50), get_file_name(folder, 0.5, 2, 0)],
+                           legend_labels=list(
+            ["LCT3", "LCT10", "LCT50", "LCTvar"]), compartment_idx=-1,
+            file_name="new_infections_drophalf_reldeviation")
+        plot_rel_deviation(get_file_name(folder, 0.5, 2, 1), [get_file_name(folder, 0.5, 2, 3),
+                                                              get_file_name(folder, 0.5, 2, 10), get_file_name(folder, 0.5, 2, 50), get_file_name(folder, 0.5, 2, 0)],
+                           legend_labels=list(
+            ["LCT3", "LCT10", "LCT50", "LCTvar"]), compartment_idx=2,
+            file_name="carrier_compartment_drophalf_reldeviation")
+
+        plot_rel_deviation(get_file_name(folder, 0.5, 2, 1), [get_file_name(folder, 0.5, 2, 3),
+                                                              get_file_name(folder, 0.5, 2, 10), get_file_name(folder, 0.5, 2, 50), get_file_name(folder, 0.5, 2, 0)],
+                           legend_labels=list(
+            ["LCT3", "LCT10", "LCT50", "LCTvar"]), compartment_idx=3,
+            file_name="carrier_compartment_drophalf_reldeviation")
+
+        folder = os.path.join(result_dir, "riseReffTo2_40")
+        plot_rel_deviation(get_file_name(folder, 2, 2, 1), [get_file_name(folder, 2, 2, 3),
+                                                            get_file_name(folder, 2, 2, 10), get_file_name(folder, 2,  2, 50), get_file_name(folder, 2,  2, 0)],
+                           legend_labels=list(
+            ["LCT3", "LCT10", "LCT50", "LCTvar"]), compartment_idx=-1,
+            file_name="new_infections_rise2_reldeviation")
+        plot_rel_deviation(get_file_name(folder, 2, 2, 1), [get_file_name(folder, 2, 2, 3),
+                                                            get_file_name(folder, 2, 2, 10), get_file_name(folder, 2, 2, 50), get_file_name(folder, 2, 2, 0)],
+                           legend_labels=list(
+            ["LCT3", "LCT10", "LCT50", "LCTvar"]), compartment_idx=2,
+            file_name="carrier_compartment_rise2_reldeviation")
+        plot_rel_deviation(get_file_name(folder, 2, 2, 1), [get_file_name(folder, 2, 2, 3),
+                                                            get_file_name(folder, 2, 2, 10), get_file_name(folder, 2, 2, 50), get_file_name(folder, 2, 2, 0)],
+                           legend_labels=list(
+            ["LCT3", "LCT10", "LCT50", "LCTvar"]), compartment_idx=3,
+            file_name="infected_compartment_rise2_reldeviation")
 
 
 if __name__ == "__main__":
