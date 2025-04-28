@@ -67,6 +67,7 @@ do
 
     # Third case: Second case but with TimeExposed scaled by 0.5. Exclude Lct Var.
     if [ "$num_subcomp" -ne 0 ]; then 
+        simulation_days=12
         scale_TimeExposed=0.5
         tReff=2.
         # Additionally save result with division in subcompartments.

@@ -18,7 +18,7 @@
 # limitations under the License.
 #############################################################################
 """@plot_additional.py
-TODO
+Additional plot functions.
 """
 
 import h5py
@@ -126,7 +126,7 @@ def plot_compartments_age_resolved(file, file_name=""):
 
 
 def plot_compartments_rel_deviation(unresolved_filename, files, legend_labels, file_name=""):
-    """ Creates a plot of the simulation results for the compartments. 
+    """ TODO Creates a plot of the simulation results for the compartments. 
     It has one subplot per compartment in two rows. The plotted compartments can be set with 
     compartment_indices and the number of columns depends on this setting. 
     This function can be used to compare the size of the compartments of results,
@@ -205,7 +205,7 @@ def plot_compartments_rel_deviation(unresolved_filename, files, legend_labels, f
 
 
 def plot_rel_deviation(ode_filename, files, legend_labels,  compartment_idx=1, file_name=""):
-    """ Creates a plot of the simulation results for one specified compartment. 
+    """ TODO Creates a plot of the simulation results for one specified compartment. 
     The result should consist of accumulated numbers for subcompartments.
     This function can be used to compare the size of one specific compartment for different simulation results,
     e.g., obtained with different models or different parameter specifications.

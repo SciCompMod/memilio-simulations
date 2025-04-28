@@ -197,6 +197,10 @@ def main():
         paths_to_file = os.path.join(result_dir, file_name)
         extract_json_segments(paths_to_file+'.txt', paths_to_file+'.json')
         plot_runtime(paths_to_file+'.json', file_name)
+        file_name = '100-2000opt0_run2'
+        paths_to_file = os.path.join(result_dir, file_name)
+        extract_json_segments(paths_to_file+'.txt', paths_to_file+'.json')
+        plot_runtime(paths_to_file+'.json', file_name)
 
 
 if __name__ == "__main__":

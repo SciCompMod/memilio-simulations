@@ -216,6 +216,7 @@ mio::IOResult<void> simulate(ScalarType Reff, ScalarType tReff, ScalarType tmax,
         1. / (transmissionProbabilityOnContact *
               (timeInfectedNoSymptoms * relativeTransmissionNoSymptoms +
                (1 - recoveredPerInfectedNoSymptoms) * timeInfectedSymptoms * riskOfInfectionFromSymptomatic));
+    std::cout << "Initial contacts: " << contacts_R1 << std::endl;
 
     mio::ContactMatrixGroup contact_matrix = mio::ContactMatrixGroup(1, 1);
     if (Reff <= 1.) {

@@ -28,6 +28,7 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 import scipy.stats as stats
+import pandas as pd
 
 plotfolder = 'Plots'
 
@@ -130,13 +131,39 @@ def plot_contact_matrix(file_name=''):
     plt.close()
 
 
+def print_final_sizes():
+    """ Prints the final sizes in a tabular format and rounds them to the nearest integer value. 
+        Furthermore, the relative deviation of the LCT final sizes to the ODE final size is calculated and printed.
+    """
+    dict = {"ODE": [66277719.001884, 81507936.300044, 83151259.562917],
+            "LCT3": [66271489.873796, 81506778.678371, 83151254.720383],
+            "LCT10": [66268729.637168, 81506459.128454, 83151254.111067],
+            "LCT50": [66267697.220051, 81506384.517802, 83151254.080122],
+            "LCTvar": [66269603.922679, 81506509.627643, 83151254.150495]}
+    df = pd.DataFrame(data=dict, index=(["Reff2", "Reff4", "Reff10"]))
+    df_rel = df.copy()
+    df_rel["LCT3"] = ((df["LCT3"]-df["ODE"])/df["ODE"])*100
+    df_rel["LCT10"] = ((df["LCT10"]-df["ODE"])/df["ODE"])*100
+    df_rel["LCT50"] = ((df["LCT50"]-df["ODE"])/df["ODE"])*100
+    df_rel["LCTvar"] = ((df["LCTvar"]-df["ODE"])/df["ODE"])*100
+    df_rel["ODE"] = 0
+    df_rel = round(df_rel, 6)
+    print("Final sizes: ")
+    df = round(df)
+    print(df)
+    print(" ")
+    print("Relative deviation to ODE: ")
+    print(df_rel)
+
+
 def main():
-    if not os.path.isdir(plotfolder):
-        os.makedirs(plotfolder)
-    ns = list([1, 3, 5, 10, 20, 50, 150, 300])
-    plot_erlang_survival(ns, "survival")
-    plot_erlang_density(ns, "density")
-    plot_contact_matrix("contact_pattern")
+    print_final_sizes()
+    # if not os.path.isdir(plotfolder):
+    #     os.makedirs(plotfolder)
+    # ns = list([1, 3, 5, 10, 20, 50, 150, 300])
+    # plot_erlang_survival(ns, "survival")
+    # plot_erlang_density(ns, "density")
+    # plot_contact_matrix("contact_pattern")
 
 
 if __name__ == "__main__":

@@ -514,6 +514,7 @@ def plot_daily_new_transmissions(files, legend_labels, file_name="", tmax=0):
     """
     plt.figure(file_name)
 
+    ylim = 0
     # Add simulation results to plot.
     for file in range(len(files)):
         # Load data.
@@ -530,6 +531,8 @@ def plot_daily_new_transmissions(files, legend_labels, file_name="", tmax=0):
         total = data['Total'][:, :]
         daily_new_transmissions = (
             total[:-1, 0]-total[1:, 0])/(dates[1:]-dates[:-1])
+        if np.max(daily_new_transmissions) > ylim:
+            ylim = np.max(daily_new_transmissions)
         # Plot result.
         if legend_labels[file] in color_dict:
             plt.plot(dates[1:], daily_new_transmissions, linewidth=1.2,
@@ -542,7 +545,7 @@ def plot_daily_new_transmissions(files, legend_labels, file_name="", tmax=0):
     plt.xlabel('Simulation time [days]', fontsize=fontsize_labels)
     plt.yticks(fontsize=9)
     plt.ylabel('Daily new transmissions', fontsize=fontsize_labels)
-    plt.ylim(bottom=0, top=np.max(daily_new_transmissions)*1.05)
+    plt.ylim(bottom=0, top=ylim*1.05)
     if tmax > 0:
         plt.xlim(left=0, right=tmax)
     else:
@@ -647,7 +650,7 @@ def main():
                                       get_file_name(folder, 2, 0, 10), get_file_name(folder, 2, 0, 50), get_file_name(folder, 2, 0, 0)],
                                      legend_labels=list(
             ["ODE", "LCT3", "LCT10", "LCT50", "LCTvar"]),
-            file_name="new_infections_rise2_long", tmax=150)
+            file_name="new_infections_rise2_long", tmax=175)
         plot_daily_new_transmissions([get_file_name(folder, 4, 0, 1), get_file_name(folder, 4, 0, 3),
                                       get_file_name(folder, 4, 0, 10), get_file_name(folder, 4, 0, 50), get_file_name(folder, 4, 0, 0)],
                                      legend_labels=list(
