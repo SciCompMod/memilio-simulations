@@ -21,11 +21,62 @@
 #include "lct_secir/infection_state.h"
 #include "lct_secir/parameters_io.h"
 
+namespace mio
+{
+
+template <class IOContext, class... States>
+void serialize_internal(IOContext& io, const mio::lsecir::Model<States...>& m)
+{
+    auto obj = io.create_object("LctModel");
+    obj.add_element("Parameters", m.parameters);
+    obj.add_element("Populations", m.populations);
+}
+
+template <class IOContext, class... States>
+IOResult<mio::lsecir::Model<States...>> deserialize_internal(IOContext& io, Tag<mio::lsecir::Model<States...>> tag)
+{
+    using M     = mio::lsecir::Model<States...>;
+    auto obj    = io.expect_object("LctModel");
+    auto params = obj.expect_element("Parameters", Tag<typename M::ParameterSet>{});
+    auto pop    = obj.expect_element("Populations", Tag<typename M::Populations>{});
+    return mio::apply(
+        io,
+        [](auto&& params_, auto&& pop_) {
+            return M{pop_, params_};
+        },
+        params, pop);
+}
+
+template <class IOContext, class... States>
+void serialize_internal(IOContext& io, const mio::LctPopulations<States...>& pop)
+{
+    auto obj = io.create_object("LctPopulations");
+    obj.add_element("Populations", pop.array());
+}
+
+template <class IOContext, class... States>
+IOResult<mio::LctPopulations<States...>> deserialize_internal(IOContext& io, Tag<mio::LctPopulations<States...>> tag)
+{
+    auto obj = io.expect_object("LctPopulations");
+    auto pop = obj.expect_element("Populations", Tag<Eigen::Array<UncertainValue<double>, Eigen::Dynamic, 1>>{});
+    return mio::apply(
+        io,
+        [](auto&& pop_) {
+            mio::LctPopulations<States...> p;
+            p.array() = pop_;
+            return p;
+        },
+        pop);
+}
+
+} // namespace mio
+
 #include "memilio/config.h"
 #include "memilio/epidemiology/contact_matrix.h"
 #include "memilio/epidemiology/uncertain_matrix.h"
 #include "memilio/epidemiology/lct_infection_state.h"
 #include "memilio/math/eigen.h"
+#include "memilio/utils/miompi.h"
 #include "memilio/utils/time_series.h"
 #include "memilio/utils/logging.h"
 #include "memilio/compartments/simulation.h"
@@ -34,12 +85,23 @@
 #include "memilio/io/io.h"
 #include "memilio/io/mobility_io.h"
 #include "memilio/io/epi_data.h"
+#include "memilio/utils/uncertain_value.h"
 
 #include "boost/numeric/odeint/stepper/runge_kutta_cash_karp54.hpp"
 #include <string>
 #include <iostream>
 #include <vector>
 #include <type_traits>
+
+#include "memilio/utils/parameter_distributions.h"
+#include "memilio/utils/uncertain_value.h"
+#include "memilio/compartments/parameter_studies.h"
+
+mio::UncertainValue<ScalarType> uncertain(ScalarType v)
+{
+    const double var = .1;
+    return mio::UncertainValue<ScalarType>(v, mio::ParameterDistributionUniform(v * (1 - var), v * (1 + var)));
+}
 
 namespace params
 {
@@ -154,7 +216,8 @@ void set_npi_october(mio::ContactMatrixGroup& contact_matrices)
     auto offset_npi = mio::SimulationTime(mio::get_offset_in_days(mio::Date(2020, 10, 25), start_date));
     for (auto&& contact_location : contact_locations) {
         contact_matrices[size_t(contact_location.first)].add_damping(
-            Eigen::MatrixXd::Constant(num_groups, num_groups, npi_size), offset_npi);
+            Eigen::MatrixXd::Constant(num_groups, num_groups, npi_size),
+            offset_npi); // no uncertain: internal type is MatrixXd
     }
 }
 
@@ -178,8 +241,10 @@ mio::IOResult<mio::UncertainContactMatrix<ScalarType>> get_contact_matrix(std::s
     for (auto&& contact_location : contact_locations) {
         BOOST_OUTCOME_TRY(auto&& baseline,
                           mio::read_mobility_plain(contact_data_dir + "baseline_" + contact_location.second + ".txt"));
-        contact_matrices[size_t(contact_location.first)].get_baseline() = scale_contacts * baseline;
-        contact_matrices[size_t(contact_location.first)].get_minimum()  = Eigen::MatrixXd::Zero(num_groups, num_groups);
+        contact_matrices[size_t(contact_location.first)].get_baseline() =
+            scale_contacts * baseline; // no uncertain: is matrix
+        contact_matrices[size_t(contact_location.first)].get_minimum() =
+            Eigen::MatrixXd::Zero(num_groups, num_groups); // no uncertain: is 0
     }
 
     // auto offset_npi = mio::SimulationTime(mio::get_offset_in_days(mio::Date(2020, 10, 1), start_date));
@@ -198,6 +263,35 @@ mio::IOResult<mio::UncertainContactMatrix<ScalarType>> get_contact_matrix(std::s
     }
     return mio::success(mio::UncertainContactMatrix<ScalarType>(contact_matrices));
 }
+
+template <class Model>
+typename mio::ParameterStudy<mio::Simulation<double, Model>>::ParametersGraph
+draw_sample(const typename mio::ParameterStudy<mio::Simulation<double, Model>>::ParametersGraph& graph)
+{
+    auto sampled_graph = graph;
+
+    for (auto& [_, model] : sampled_graph.nodes()) {
+        for (size_t group = 0; group < params::num_groups; group++) {
+            model.parameters.template get<mio::lsecir::TimeExposed>()[group].draw_sample();
+            model.parameters.template get<mio::lsecir::TimeInfectedNoSymptoms>()[group].draw_sample();
+            model.parameters.template get<mio::lsecir::TimeInfectedSymptoms>()[group].draw_sample();
+            model.parameters.template get<mio::lsecir::TimeInfectedSevere>()[group].draw_sample();
+            model.parameters.template get<mio::lsecir::TimeInfectedCritical>()[group].draw_sample();
+            model.parameters.template get<mio::lsecir::TransmissionProbabilityOnContact>()[group].draw_sample();
+
+            model.parameters.template get<mio::lsecir::RelativeTransmissionNoSymptoms>()[group].draw_sample();
+            model.parameters.template get<mio::lsecir::RiskOfInfectionFromSymptomatic>()[group].draw_sample();
+            model.parameters.template get<mio::lsecir::RecoveredPerInfectedNoSymptoms>()[group].draw_sample();
+            model.parameters.template get<mio::lsecir::SeverePerInfectedSymptoms>()[group].draw_sample();
+            model.parameters.template get<mio::lsecir::CriticalPerSevere>()[group].draw_sample();
+            model.parameters.template get<mio::lsecir::DeathsPerCritical>()[group].draw_sample();
+        }
+    }
+
+    return sampled_graph;
+}
+
+int num_runs = 1;
 
 /**
  * @brief Perform simulation for a Covid-19 inspired scenario in Germany.
@@ -252,29 +346,31 @@ mio::IOResult<void> simulate(std::string const& contact_data_dir, std::string co
 
     // Define parameters used for simulation and initialization.
     for (size_t group = 0; group < num_groups; group++) {
-        model.parameters.get<mio::lsecir::TimeExposed>()[group]            = timeExposed[group];
-        model.parameters.get<mio::lsecir::TimeInfectedNoSymptoms>()[group] = timeInfectedNoSymptoms[group];
-        model.parameters.get<mio::lsecir::TimeInfectedSymptoms>()[group]   = timeInfectedSymptoms[group];
-        model.parameters.get<mio::lsecir::TimeInfectedSevere>()[group]     = timeInfectedSevere[group];
-        model.parameters.get<mio::lsecir::TimeInfectedCritical>()[group]   = timeInfectedCritical[group];
+        model.parameters.get<mio::lsecir::TimeExposed>()[group]            = uncertain(timeExposed[group]);
+        model.parameters.get<mio::lsecir::TimeInfectedNoSymptoms>()[group] = uncertain(timeInfectedNoSymptoms[group]);
+        model.parameters.get<mio::lsecir::TimeInfectedSymptoms>()[group]   = uncertain(timeInfectedSymptoms[group]);
+        model.parameters.get<mio::lsecir::TimeInfectedSevere>()[group]     = uncertain(timeInfectedSevere[group]);
+        model.parameters.get<mio::lsecir::TimeInfectedCritical>()[group]   = uncertain(timeInfectedCritical[group]);
         model.parameters.get<mio::lsecir::TransmissionProbabilityOnContact>()[group] =
-            transmissionProbabilityOnContact[group];
+            uncertain(transmissionProbabilityOnContact[group]);
 
-        model.parameters.get<mio::lsecir::RelativeTransmissionNoSymptoms>()[group] = relativeTransmissionNoSymptoms;
-        model.parameters.get<mio::lsecir::RiskOfInfectionFromSymptomatic>()[group] = riskOfInfectionFromSymptomatic;
-
+        model.parameters.get<mio::lsecir::RelativeTransmissionNoSymptoms>()[group] =
+            uncertain(relativeTransmissionNoSymptoms);
+        model.parameters.get<mio::lsecir::RiskOfInfectionFromSymptomatic>()[group] =
+            uncertain(riskOfInfectionFromSymptomatic);
         model.parameters.get<mio::lsecir::RecoveredPerInfectedNoSymptoms>()[group] =
-            recoveredPerInfectedNoSymptoms[group];
-        model.parameters.get<mio::lsecir::SeverePerInfectedSymptoms>()[group] = severePerInfectedSymptoms[group];
-        model.parameters.get<mio::lsecir::CriticalPerSevere>()[group]         = criticalPerSevere[group];
-        model.parameters.get<mio::lsecir::DeathsPerCritical>()[group]         = deathsPerCritical[group];
+            uncertain(recoveredPerInfectedNoSymptoms[group]);
+        model.parameters.get<mio::lsecir::SeverePerInfectedSymptoms>()[group] =
+            uncertain(severePerInfectedSymptoms[group]);
+        model.parameters.get<mio::lsecir::CriticalPerSevere>()[group] = uncertain(criticalPerSevere[group]);
+        model.parameters.get<mio::lsecir::DeathsPerCritical>()[group] = uncertain(deathsPerCritical[group]);
     }
 
     BOOST_OUTCOME_TRY(auto&& contact_matrix, get_contact_matrix(contact_data_dir));
 
-    model.parameters.get<mio::lsecir::ContactPatterns>() = contact_matrix;
-    model.parameters.get<mio::lsecir::Seasonality>()     = seasonality;
-    model.parameters.get<mio::lsecir::StartDay>()        = mio::get_day_in_year(start_date);
+    model.parameters.get<mio::lsecir::ContactPatterns>() = contact_matrix; // no uncertain: set by get_contact_matrix
+    model.parameters.get<mio::lsecir::Seasonality>()     = seasonality; // no uncertain: is 0
+    model.parameters.get<mio::lsecir::StartDay>()        = mio::get_day_in_year(start_date); // no uncertain: is date
 
     // Set initial values using reported data.
     BOOST_OUTCOME_TRY(auto&& rki_data, mio::read_confirmed_cases_data(infection_data_dir));
@@ -294,36 +390,78 @@ mio::IOResult<void> simulate(std::string const& contact_data_dir, std::string co
     // Choose dt_min = dt_max to get a fixed step size.
     integrator->set_dt_min(dt);
     integrator->set_dt_max(dt);
-    mio::TimeSeries<ScalarType> result = mio::simulate<ScalarType, Model>(0, tmax, dt, model, integrator);
 
-    // Calculate result without division in subcompartments and without division in age groups.
-    mio::TimeSeries<ScalarType> populations                 = model.calculate_compartments(result);
-    mio::TimeSeries<ScalarType> populations_accumulated_age = sum_age_groups(populations);
+    mio::ParameterStudy<mio::Simulation<double, Model>> parameter_study(model, 0, tmax, num_runs);
+    auto ensemble = parameter_study.run(draw_sample<Model>, [&](auto results_graph, auto&& run_idx) {
+        auto interpolated_result = mio::interpolate_simulation_result(results_graph);
 
-    if (!save_dir.empty()) {
-        std::string filename = save_dir + "lct_" + std::to_string(start_date.year) + "-" +
-                               std::to_string(start_date.month) + "-" + std::to_string(start_date.day) + "_subcomp" +
-                               std::to_string(num_subcompartments);
-        mio::IOResult<void> save_result_status = mio::save_result({populations}, {0}, 1, filename + "_ageresolved.h5");
-        if (!save_result_status) {
-            return save_result_status;
+        auto params = std::vector<Model>{};
+        params.reserve(results_graph.nodes().size());
+        std::transform(results_graph.nodes().begin(), results_graph.nodes().end(), std::back_inserter(params),
+                       [](auto&& node) {
+                           return node.property.get_simulation().get_model();
+                       });
+        return std::make_pair(std::move(interpolated_result), std::move(params));
+    });
+    // auto result          = ensemble[0].nodes()[0].property.get_result();
+
+    if (ensemble.size() > 0) {
+        auto ensemble_results = std::vector<std::vector<mio::TimeSeries<double>>>{};
+        ensemble_results.reserve(ensemble.size());
+        auto ensemble_params = std::vector<std::vector<Model>>{};
+        ensemble_params.reserve(ensemble.size());
+        for (auto&& run : ensemble) {
+            ensemble_results.emplace_back(std::move(run.first));
+            ensemble_params.emplace_back(std::move(run.second));
         }
-        save_result_status = mio::save_result({populations_accumulated_age}, {0}, 1, filename + "_accumulated.h5");
-        if (!save_result_status) {
-            return save_result_status;
+
+        auto ensemble_results_p05 = ensemble_percentile(ensemble_results, 0.05);
+        auto ensemble_results_p25 = ensemble_percentile(ensemble_results, 0.25);
+        auto ensemble_results_p50 = ensemble_percentile(ensemble_results, 0.50);
+        auto ensemble_results_p75 = ensemble_percentile(ensemble_results, 0.75);
+        auto ensemble_results_p95 = ensemble_percentile(ensemble_results, 0.95);
+
+        auto& result = ensemble_results_p50[0];
+
+        // mio::TimeSeries<ScalarType> result = mio::simulate<ScalarType, Model>(0, tmax, dt, model, integrator);
+
+        // Calculate result without division in subcompartments and without division in age groups.
+        mio::TimeSeries<ScalarType> populations                 = model.calculate_compartments(result);
+        mio::TimeSeries<ScalarType> populations_accumulated_age = sum_age_groups(populations);
+
+        if (!save_dir.empty()) {
+            std::string filename = save_dir + "lct_" + std::to_string(start_date.year) + "-" +
+                                   std::to_string(start_date.month) + "-" + std::to_string(start_date.day) +
+                                   "_subcomp" + std::to_string(num_subcompartments);
+            mio::IOResult<void> save_result_status =
+                mio::save_result({populations}, {0}, 1, filename + "_ageresolved.h5");
+            if (!save_result_status) {
+                return save_result_status;
+            }
+            save_result_status = mio::save_result({populations_accumulated_age}, {0}, 1, filename + "_accumulated.h5");
+            if (!save_result_status) {
+                return save_result_status;
+            }
+
+            BOOST_OUTCOME_TRY(save_result(ensemble_results_p05, {0}, num_groups, filename + "_percentiles_p05.h5"));
+            BOOST_OUTCOME_TRY(save_result(ensemble_results_p25, {0}, num_groups, filename + "_percentiles_p25.h5"));
+            BOOST_OUTCOME_TRY(save_result(ensemble_results_p50, {0}, num_groups, filename + "_percentiles_p50.h5"));
+            BOOST_OUTCOME_TRY(save_result(ensemble_results_p75, {0}, num_groups, filename + "_percentiles_p75.h5"));
+            BOOST_OUTCOME_TRY(save_result(ensemble_results_p95, {0}, num_groups, filename + "_percentiles_p95.h5"));
         }
+        print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 0.1);
+        print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 2);
+        print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 40);
+        // Print the predicted number of daily new transmissions at the start of the simulation.
+        // Could be used to compare the result with the extrapolated reported data and, afterwards, to scale the
+        // contacts using the variable scale_contacts.
+        std::cout << "Predicted number of daily new transmissions at the start of the simulation: " << std::endl;
+        std::cout << std::fixed << std::setprecision(1)
+                  << (populations_accumulated_age[0][0] - populations_accumulated_age[1][0]) /
+                         (populations.get_time(1) - populations.get_time(0))
+                  //   << result.get_last_value().transpose() //
+                  << std::endl;
     }
-    print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 0.1);
-    print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 2);
-    print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 40);
-    // Print the predicted number of daily new transmissions at the start of the simulation.
-    // Could be used to compare the result with the extrapolated reported data and, afterwards, to scale the
-    // contacts using the variable scale_contacts.
-    std::cout << "Predicted number of daily new transmissions at the start of the simulation: " << std::endl;
-    std::cout << std::fixed << std::setprecision(1)
-              << (populations_accumulated_age[0][0] - populations_accumulated_age[1][0]) /
-                     (populations.get_time(1) - populations.get_time(0))
-              << std::endl;
 
     return mio::success();
 }
@@ -359,7 +497,17 @@ int main(int argc, char** argv)
     std::string case_data_dir    = "../data";
     std::string save_dir         = "";
 
+    mio::mpi::init();
+
+#ifdef MEMILIO_ENABLE_MPI
+
+    std::cout << "aaaaaaaaaa\n";
+#endif
+
     switch (argc) {
+    case 13:
+        num_runs = std::stoi(argv[12]);
+        [[fallthrough]];
     case 12:
         params::npi_size = std::stod(argv[11]);
         [[fallthrough]];
@@ -393,9 +541,13 @@ int main(int argc, char** argv)
 
     auto result = simulate(contact_data_dir, infection_data_dir, divi_data_dir, save_dir);
     if (!result) {
-        printf("%s\n", result.error().formatted_message().c_str());
+        if (mio::mpi::is_root()) {
+            printf("%s\n", result.error().formatted_message().c_str());
+        }
+        mio::mpi::finalize();
         return -1;
     }
+    mio::mpi::finalize();
 
     return 0;
 }
