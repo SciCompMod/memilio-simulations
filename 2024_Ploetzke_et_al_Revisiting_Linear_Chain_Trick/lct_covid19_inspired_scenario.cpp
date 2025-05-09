@@ -1,7 +1,7 @@
 /* 
 * Copyright (C) 2020-2025 MEmilio
 *
-* Authors: Lena Ploetzke
+* Authors: Lena Ploetzke, Rene Schmieding
 *
 * Contact: Martin J. Kuehn <Martin.Kuehn@DLR.de>
 *
@@ -76,7 +76,6 @@ IOResult<mio::LctPopulations<States...>> deserialize_internal(IOContext& io, Tag
 #include "memilio/epidemiology/uncertain_matrix.h"
 #include "memilio/epidemiology/lct_infection_state.h"
 #include "memilio/math/eigen.h"
-#include "memilio/utils/miompi.h"
 #include "memilio/utils/time_series.h"
 #include "memilio/utils/logging.h"
 #include "memilio/compartments/simulation.h"
@@ -85,14 +84,16 @@ IOResult<mio::LctPopulations<States...>> deserialize_internal(IOContext& io, Tag
 #include "memilio/io/io.h"
 #include "memilio/io/mobility_io.h"
 #include "memilio/io/epi_data.h"
-#include "memilio/utils/uncertain_value.h"
 
 #include "boost/numeric/odeint/stepper/runge_kutta_cash_karp54.hpp"
 #include <string>
 #include <iostream>
 #include <vector>
 #include <type_traits>
+#include <omp.h>
+//#include <mpi.h>
 
+#include "memilio/utils/miompi.h"
 #include "memilio/utils/parameter_distributions.h"
 #include "memilio/utils/uncertain_value.h"
 #include "memilio/compartments/parameter_studies.h"
@@ -110,6 +111,8 @@ namespace params
 // each corresponds to the approximate stay time in the compartment.
 constexpr int num_subcompartments = NUM_SUBCOMPARTMENTS;
 constexpr size_t num_groups       = 6;
+int num_ensemble_runs             = 1;
+int num_processes                 = 1;
 
 // Define (age-resolved) parameters.
 mio::Date start_date(2021, 01, 01);
@@ -247,14 +250,6 @@ mio::IOResult<mio::UncertainContactMatrix<ScalarType>> get_contact_matrix(std::s
             Eigen::MatrixXd::Zero(num_groups, num_groups); // no uncertain: is 0
     }
 
-    // auto offset_npi = mio::SimulationTime(mio::get_offset_in_days(mio::Date(2020, 10, 1), start_date));
-    // for (auto&& contact_location : contact_locations) {
-    //     contact_matrices[size_t(contact_location.first)].add_damping(
-    //         Eigen::MatrixXd::Constant(num_groups, num_groups, 0.), offset_npi - mio::SimulationTime(0.5));
-    //     contact_matrices[size_t(contact_location.first)].add_damping(
-    //         Eigen::MatrixXd::Constant(num_groups, num_groups, -0.1), offset_npi);
-    // }
-
     // Add NPIs to the contact matrices.
     mio::Date end_date     = mio::offset_date_by_days(start_date, (int)tmax);
     auto start_npi_october = mio::Date(2020, 10, 25);
@@ -291,8 +286,6 @@ draw_sample(const typename mio::ParameterStudy<mio::Simulation<double, Model>>::
     return sampled_graph;
 }
 
-int num_runs = 1;
-
 /**
  * @brief Perform simulation for a Covid-19 inspired scenario in Germany.
  *
@@ -318,7 +311,9 @@ mio::IOResult<void> simulate(std::string const& contact_data_dir, std::string co
                              std::string const& divi_data_dir, std::string save_dir = "")
 {
     using namespace params;
-    std::cout << "Realistic scenario with " << num_subcompartments << " subcompartments." << std::endl;
+    if (mio::mpi::is_root()) {
+        std::cout << "Realistic scenario with " << num_subcompartments << " subcompartments." << std::endl;
+    }
     // Initialize (age-resolved) model.
     using InfState = mio::lsecir::InfectionState;
     // Define appropriate LCT model type: 1.) An LCT model with NUM_SUBCOMPARTMENTS subcompartments for all compartments
@@ -391,7 +386,11 @@ mio::IOResult<void> simulate(std::string const& contact_data_dir, std::string co
     integrator->set_dt_min(dt);
     integrator->set_dt_max(dt);
 
-    mio::ParameterStudy<mio::Simulation<double, Model>> parameter_study(model, 0, tmax, num_runs);
+    mio::ParameterStudy<mio::Simulation<double, Model>> parameter_study(model, 0, tmax, num_ensemble_runs);
+    ScalarType total_time = 0;
+    if (mio::mpi::is_root()) {
+        total_time -= omp_get_wtime();
+    }
     auto ensemble = parameter_study.run(draw_sample<Model>, [&](auto results_graph, auto&& run_idx) {
         auto interpolated_result = mio::interpolate_simulation_result(results_graph);
 
@@ -403,7 +402,9 @@ mio::IOResult<void> simulate(std::string const& contact_data_dir, std::string co
                        });
         return std::make_pair(std::move(interpolated_result), std::move(params));
     });
-    // auto result          = ensemble[0].nodes()[0].property.get_result();
+    if (mio::mpi::is_root()) {
+        total_time += omp_get_wtime();
+    }
 
     if (ensemble.size() > 0) {
         auto ensemble_results = std::vector<std::vector<mio::TimeSeries<double>>>{};
@@ -415,52 +416,39 @@ mio::IOResult<void> simulate(std::string const& contact_data_dir, std::string co
             ensemble_params.emplace_back(std::move(run.second));
         }
 
-        auto ensemble_results_p05 = ensemble_percentile(ensemble_results, 0.05);
-        auto ensemble_results_p25 = ensemble_percentile(ensemble_results, 0.25);
-        auto ensemble_results_p50 = ensemble_percentile(ensemble_results, 0.50);
-        auto ensemble_results_p75 = ensemble_percentile(ensemble_results, 0.75);
-        auto ensemble_results_p95 = ensemble_percentile(ensemble_results, 0.95);
+        auto ensemble_results_p25 = ensemble_percentile(ensemble_results, 0.25)[0];
+        auto ensemble_results_p50 = ensemble_percentile(ensemble_results, 0.50)[0];
+        auto ensemble_results_p75 = ensemble_percentile(ensemble_results, 0.75)[0];
 
-        auto& result = ensemble_results_p50[0];
+        if (mio::mpi::is_root()) {
+            if (!save_dir.empty()) {
+                std::cout << "{ \"Subcompartments\": " << num_subcompartments << ", " << std::endl;
+                std::cout << "\"Processes\": " << num_processes << "," << std::endl;
+                std::cout << "\"Num_ensemble_runs\": " << num_ensemble_runs << "," << std::endl;
+                std::cout << "\"Time\": " << total_time << "\n}," << std::endl;
 
-        // mio::TimeSeries<ScalarType> result = mio::simulate<ScalarType, Model>(0, tmax, dt, model, integrator);
+                std::string filename = save_dir + "lct_" + std::to_string(start_date.year) + "-" +
+                                       std::to_string(start_date.month) + "-" + std::to_string(start_date.day) +
+                                       "_subcomp" + std::to_string(num_subcompartments);
 
-        // Calculate result without division in subcompartments and without division in age groups.
-        mio::TimeSeries<ScalarType> populations                 = model.calculate_compartments(result);
-        mio::TimeSeries<ScalarType> populations_accumulated_age = sum_age_groups(populations);
-
-        if (!save_dir.empty()) {
-            std::string filename = save_dir + "lct_" + std::to_string(start_date.year) + "-" +
-                                   std::to_string(start_date.month) + "-" + std::to_string(start_date.day) +
-                                   "_subcomp" + std::to_string(num_subcompartments);
-            mio::IOResult<void> save_result_status =
-                mio::save_result({populations}, {0}, 1, filename + "_ageresolved.h5");
-            if (!save_result_status) {
-                return save_result_status;
+                // Calculate result without division in subcompartments and without division in age groups.
+                mio::TimeSeries<ScalarType> populations_p25 =
+                    sum_age_groups(model.calculate_compartments(ensemble_results_p25));
+                BOOST_OUTCOME_TRY(
+                    mio::save_result({populations_p25}, {0}, 1,
+                                     filename + "_np" + std::to_string(num_processes) + "_percentiles_p25.h5"));
+                mio::TimeSeries<ScalarType> populations_p50 =
+                    sum_age_groups(model.calculate_compartments(ensemble_results_p50));
+                BOOST_OUTCOME_TRY(
+                    mio::save_result({populations_p50}, {0}, 1,
+                                     filename + "_np" + std::to_string(num_processes) + "_percentiles_p50.h5"));
+                mio::TimeSeries<ScalarType> populations_p75 =
+                    sum_age_groups(model.calculate_compartments(ensemble_results_p75));
+                BOOST_OUTCOME_TRY(
+                    mio::save_result({populations_p75}, {0}, 1,
+                                     filename + "_np" + std::to_string(num_processes) + "_percentiles_p75.h5"));
             }
-            save_result_status = mio::save_result({populations_accumulated_age}, {0}, 1, filename + "_accumulated.h5");
-            if (!save_result_status) {
-                return save_result_status;
-            }
-
-            BOOST_OUTCOME_TRY(save_result(ensemble_results_p05, {0}, num_groups, filename + "_percentiles_p05.h5"));
-            BOOST_OUTCOME_TRY(save_result(ensemble_results_p25, {0}, num_groups, filename + "_percentiles_p25.h5"));
-            BOOST_OUTCOME_TRY(save_result(ensemble_results_p50, {0}, num_groups, filename + "_percentiles_p50.h5"));
-            BOOST_OUTCOME_TRY(save_result(ensemble_results_p75, {0}, num_groups, filename + "_percentiles_p75.h5"));
-            BOOST_OUTCOME_TRY(save_result(ensemble_results_p95, {0}, num_groups, filename + "_percentiles_p95.h5"));
         }
-        print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 0.1);
-        print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 2);
-        print_average_contacts(model.parameters.get<mio::lsecir::ContactPatterns>(), 40);
-        // Print the predicted number of daily new transmissions at the start of the simulation.
-        // Could be used to compare the result with the extrapolated reported data and, afterwards, to scale the
-        // contacts using the variable scale_contacts.
-        std::cout << "Predicted number of daily new transmissions at the start of the simulation: " << std::endl;
-        std::cout << std::fixed << std::setprecision(1)
-                  << (populations_accumulated_age[0][0] - populations_accumulated_age[1][0]) /
-                         (populations.get_time(1) - populations.get_time(0))
-                  //   << result.get_last_value().transpose() //
-                  << std::endl;
     }
 
     return mio::success();
@@ -498,55 +486,60 @@ int main(int argc, char** argv)
     std::string save_dir         = "";
 
     mio::mpi::init();
-
-#ifdef MEMILIO_ENABLE_MPI
-
-    std::cout << "aaaaaaaaaa\n";
-#endif
-
-    switch (argc) {
-    case 13:
-        num_runs = std::stoi(argv[12]);
-        [[fallthrough]];
-    case 12:
-        params::npi_size = std::stod(argv[11]);
-        [[fallthrough]];
-    case 11:
-        params::scale_confirmed_cases = std::stod(argv[10]);
-        [[fallthrough]];
-    case 10:
-        params::scale_contacts = std::stod(argv[9]);
-        [[fallthrough]];
-    case 9:
-        params::riskOfInfectionFromSymptomatic = std::stod(argv[8]);
-        [[fallthrough]];
-    case 8:
-        params::relativeTransmissionNoSymptoms = std::stod(argv[7]);
-        [[fallthrough]];
-    case 7:
-        params::start_date = mio::Date(std::stoi(argv[4]), std::stoi(argv[5]), std::stoi(argv[6]));
-        [[fallthrough]];
-    case 4:
-        save_dir = argv[3];
-        [[fallthrough]];
-    case 3:
-        contact_data_dir = argv[2];
-        [[fallthrough]];
-    case 2:
-        case_data_dir = argv[1];
+    if (mio::mpi::is_root()) {
+        std::cout << "hallo" << std::endl;
     }
 
-    const std::string infection_data_dir = case_data_dir + "/Germany/cases_all_age_ma7.json";
-    const std::string divi_data_dir      = case_data_dir + "/Germany/germany_divi_all_dates.json";
+    // int size;
+    // MPI_Comm_size(mio::mpi::get_world(), &size);
+    // std::cout << size << std::endl;
 
-    auto result = simulate(contact_data_dir, infection_data_dir, divi_data_dir, save_dir);
-    if (!result) {
-        if (mio::mpi::is_root()) {
-            printf("%s\n", result.error().formatted_message().c_str());
-        }
-        mio::mpi::finalize();
-        return -1;
-    }
+    // switch (argc) {
+    // case 14:
+    //     params::num_processes = std::stoi(argv[13]);
+    //     [[fallthrough]];
+    // case 13:
+    //     params::num_ensemble_runs = std::stoi(argv[12]);
+    //     [[fallthrough]];
+    // case 12:
+    //     params::npi_size = std::stod(argv[11]);
+    //     [[fallthrough]];
+    // case 11:
+    //     params::scale_confirmed_cases = std::stod(argv[10]);
+    //     [[fallthrough]];
+    // case 10:
+    //     params::scale_contacts = std::stod(argv[9]);
+    //     [[fallthrough]];
+    // case 9:
+    //     params::riskOfInfectionFromSymptomatic = std::stod(argv[8]);
+    //     [[fallthrough]];
+    // case 8:
+    //     params::relativeTransmissionNoSymptoms = std::stod(argv[7]);
+    //     [[fallthrough]];
+    // case 7:
+    //     params::start_date = mio::Date(std::stoi(argv[4]), std::stoi(argv[5]), std::stoi(argv[6]));
+    //     [[fallthrough]];
+    // case 4:
+    //     save_dir = argv[3];
+    //     [[fallthrough]];
+    // case 3:
+    //     contact_data_dir = argv[2];
+    //     [[fallthrough]];
+    // case 2:
+    //     case_data_dir = argv[1];
+    // }
+
+    // const std::string infection_data_dir = case_data_dir + "/Germany/cases_all_age_ma7.json";
+    // const std::string divi_data_dir      = case_data_dir + "/Germany/germany_divi_all_dates.json";
+
+    // auto result = simulate(contact_data_dir, infection_data_dir, divi_data_dir, save_dir);
+    // if (!result) {
+    //     if (mio::mpi::is_root()) {
+    //         printf("%s\n", result.error().formatted_message().c_str());
+    //     }
+    //     mio::mpi::finalize();
+    //     return -1;
+    // }
     mio::mpi::finalize();
 
     return 0;

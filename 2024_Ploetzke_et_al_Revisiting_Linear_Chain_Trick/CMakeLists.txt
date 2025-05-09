@@ -45,18 +45,20 @@ if(HDF5_FOUND)
 
   add_executable(lct_impact_age_resolution lct_impact_age_resolution.cpp)
   target_link_libraries(lct_impact_age_resolution PRIVATE memilio lct_secir)
-
-  add_executable(lct_covid19_inspired_scenario lct_covid19_inspired_scenario.cpp)
-  target_link_libraries(lct_covid19_inspired_scenario PRIVATE memilio lct_secir)
 endif()
 
 find_package(OpenMP)
-find_package(LIKWID)
-# Just build run time measurement target if OpenMP is available. 
-if (OPENMP_CXX_FOUND AND LIKWID_FOUND)
-  add_executable(lct_runtime lct_runtime.cpp)
-  target_link_libraries(lct_runtime PRIVATE memilio lct_secir OpenMP::OpenMP_CXX ${LIKWID_LIBRARIES})
-  target_include_directories(lct_runtime PUBLIC ${LIKWID_INCLUDE_DIRS})
-  # target_compile_options(lct_runtime PUBLIC -O0)
-  target_compile_definitions(lct_runtime PUBLIC "-DLIKWID_PERFMON")
+if(HDF5_FOUND AND OPENMP_CXX_FOUND)
+  add_executable(lct_covid19_inspired_scenario lct_covid19_inspired_scenario.cpp)
+  target_link_libraries(lct_covid19_inspired_scenario PRIVATE memilio lct_secir OpenMP::OpenMP_CXX)
 endif()
+
+# find_package(LIKWID)
+# # Just build run time measurement target if OpenMP is available. 
+# if (OPENMP_CXX_FOUND AND LIKWID_FOUND)
+#   add_executable(lct_runtime lct_runtime.cpp)
+#   target_link_libraries(lct_runtime PRIVATE memilio lct_secir OpenMP::OpenMP_CXX ${LIKWID_LIBRARIES})
+#   target_include_directories(lct_runtime PUBLIC ${LIKWID_INCLUDE_DIRS})
+#   # target_compile_options(lct_runtime PUBLIC -O0)
+#   target_compile_definitions(lct_runtime PUBLIC "-DLIKWID_PERFMON")
+# endif()
