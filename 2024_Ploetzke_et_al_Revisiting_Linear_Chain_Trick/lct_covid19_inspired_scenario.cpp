@@ -116,7 +116,7 @@ int num_processes                 = 1;
 
 // Define (age-resolved) parameters.
 mio::Date start_date(2021, 01, 01);
-const ScalarType tmax                     = 45;
+const ScalarType tmax                     = 30;
 const ScalarType dt                       = 0.01;
 const ScalarType seasonality              = 0.;
 ScalarType relativeTransmissionNoSymptoms = 1.;
@@ -416,9 +416,11 @@ mio::IOResult<void> simulate(std::string const& contact_data_dir, std::string co
             ensemble_params.emplace_back(std::move(run.second));
         }
 
+        auto ensemble_results_p5  = ensemble_percentile(ensemble_results, 0.05)[0];
         auto ensemble_results_p25 = ensemble_percentile(ensemble_results, 0.25)[0];
         auto ensemble_results_p50 = ensemble_percentile(ensemble_results, 0.50)[0];
         auto ensemble_results_p75 = ensemble_percentile(ensemble_results, 0.75)[0];
+        auto ensemble_results_p95 = ensemble_percentile(ensemble_results, 0.95)[0];
 
         if (mio::mpi::is_root()) {
             if (!save_dir.empty()) {
@@ -432,6 +434,10 @@ mio::IOResult<void> simulate(std::string const& contact_data_dir, std::string co
                                        "_subcomp" + std::to_string(num_subcompartments);
 
                 // Calculate result without division in subcompartments and without division in age groups.
+                mio::TimeSeries<ScalarType> populations_p5 =
+                    sum_age_groups(model.calculate_compartments(ensemble_results_p5));
+                BOOST_OUTCOME_TRY(mio::save_result(
+                    {populations_p5}, {0}, 1, filename + "_np" + std::to_string(num_processes) + "_percentiles_p5.h5"));
                 mio::TimeSeries<ScalarType> populations_p25 =
                     sum_age_groups(model.calculate_compartments(ensemble_results_p25));
                 BOOST_OUTCOME_TRY(
@@ -447,6 +453,11 @@ mio::IOResult<void> simulate(std::string const& contact_data_dir, std::string co
                 BOOST_OUTCOME_TRY(
                     mio::save_result({populations_p75}, {0}, 1,
                                      filename + "_np" + std::to_string(num_processes) + "_percentiles_p75.h5"));
+                mio::TimeSeries<ScalarType> populations_p25 =
+                    sum_age_groups(model.calculate_compartments(ensemble_results_p95));
+                BOOST_OUTCOME_TRY(
+                    mio::save_result({populations_p95}, {0}, 1,
+                                     filename + "_np" + std::to_string(num_processes) + "_percentiles_p95.h5"));
             }
         }
     }
@@ -486,60 +497,53 @@ int main(int argc, char** argv)
     std::string save_dir         = "";
 
     mio::mpi::init();
-    if (mio::mpi::is_root()) {
-        std::cout << "hallo" << std::endl;
+    int size;
+    MPI_Comm_size(mio::mpi::get_world(), &size);
+    params::num_processes = size;
+
+    switch (argc) {
+    case 13:
+        params::num_ensemble_runs = std::stoi(argv[12]);
+        [[fallthrough]];
+    case 12:
+        params::npi_size = std::stod(argv[11]);
+        [[fallthrough]];
+    case 11:
+        params::scale_confirmed_cases = std::stod(argv[10]);
+        [[fallthrough]];
+    case 10:
+        params::scale_contacts = std::stod(argv[9]);
+        [[fallthrough]];
+    case 9:
+        params::riskOfInfectionFromSymptomatic = std::stod(argv[8]);
+        [[fallthrough]];
+    case 8:
+        params::relativeTransmissionNoSymptoms = std::stod(argv[7]);
+        [[fallthrough]];
+    case 7:
+        params::start_date = mio::Date(std::stoi(argv[4]), std::stoi(argv[5]), std::stoi(argv[6]));
+        [[fallthrough]];
+    case 4:
+        save_dir = argv[3];
+        [[fallthrough]];
+    case 3:
+        contact_data_dir = argv[2];
+        [[fallthrough]];
+    case 2:
+        case_data_dir = argv[1];
     }
 
-    // int size;
-    // MPI_Comm_size(mio::mpi::get_world(), &size);
-    // std::cout << size << std::endl;
+    const std::string infection_data_dir = case_data_dir + "/Germany/cases_all_age_ma7.json";
+    const std::string divi_data_dir      = case_data_dir + "/Germany/germany_divi_all_dates.json";
 
-    // switch (argc) {
-    // case 14:
-    //     params::num_processes = std::stoi(argv[13]);
-    //     [[fallthrough]];
-    // case 13:
-    //     params::num_ensemble_runs = std::stoi(argv[12]);
-    //     [[fallthrough]];
-    // case 12:
-    //     params::npi_size = std::stod(argv[11]);
-    //     [[fallthrough]];
-    // case 11:
-    //     params::scale_confirmed_cases = std::stod(argv[10]);
-    //     [[fallthrough]];
-    // case 10:
-    //     params::scale_contacts = std::stod(argv[9]);
-    //     [[fallthrough]];
-    // case 9:
-    //     params::riskOfInfectionFromSymptomatic = std::stod(argv[8]);
-    //     [[fallthrough]];
-    // case 8:
-    //     params::relativeTransmissionNoSymptoms = std::stod(argv[7]);
-    //     [[fallthrough]];
-    // case 7:
-    //     params::start_date = mio::Date(std::stoi(argv[4]), std::stoi(argv[5]), std::stoi(argv[6]));
-    //     [[fallthrough]];
-    // case 4:
-    //     save_dir = argv[3];
-    //     [[fallthrough]];
-    // case 3:
-    //     contact_data_dir = argv[2];
-    //     [[fallthrough]];
-    // case 2:
-    //     case_data_dir = argv[1];
-    // }
-
-    // const std::string infection_data_dir = case_data_dir + "/Germany/cases_all_age_ma7.json";
-    // const std::string divi_data_dir      = case_data_dir + "/Germany/germany_divi_all_dates.json";
-
-    // auto result = simulate(contact_data_dir, infection_data_dir, divi_data_dir, save_dir);
-    // if (!result) {
-    //     if (mio::mpi::is_root()) {
-    //         printf("%s\n", result.error().formatted_message().c_str());
-    //     }
-    //     mio::mpi::finalize();
-    //     return -1;
-    // }
+    auto result = simulate(contact_data_dir, infection_data_dir, divi_data_dir, save_dir);
+    if (!result) {
+        if (mio::mpi::is_root()) {
+            printf("%s\n", result.error().formatted_message().c_str());
+        }
+        mio::mpi::finalize();
+        return -1;
+    }
     mio::mpi::finalize();
 
     return 0;

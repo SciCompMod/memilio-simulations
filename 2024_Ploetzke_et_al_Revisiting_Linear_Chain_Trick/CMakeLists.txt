@@ -27,6 +27,8 @@ FetchContent_MakeAvailable(memilio)
 set(MEMILIO_BUILD_TESTS OFF)
 set(MEMILIO_BUILD_EXAMPLES OFF)
 set(MEMILIO_BUILD_SIMULATIONS OFF)
+set(MEMILIO_ENABLE_MPI ON)
+find_package( MPI COMPONENTS CXX REQUIRED )
 
 # Add the subdirectory for MEmilio build.
 add_subdirectory(${memilio_SOURCE_DIR}/cpp ${memilio_BINARY_DIR})
@@ -50,7 +52,7 @@ endif()
 find_package(OpenMP)
 if(HDF5_FOUND AND OPENMP_CXX_FOUND)
   add_executable(lct_covid19_inspired_scenario lct_covid19_inspired_scenario.cpp)
-  target_link_libraries(lct_covid19_inspired_scenario PRIVATE memilio lct_secir OpenMP::OpenMP_CXX)
+  target_link_libraries(lct_covid19_inspired_scenario PRIVATE memilio lct_secir OpenMP::OpenMP_CXX MPI::MPI_CXX)
 endif()
 
 # find_package(LIKWID)
