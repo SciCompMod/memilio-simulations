@@ -94,10 +94,12 @@ def plot_scaling(json_file, file_name=''):
     plt.xlabel('Number of cores', fontsize=fontsize_labels)
     plt.ylabel('Run time [seconds]', fontsize=fontsize_labels)
     plt.yticks(fontsize=fontsize_legends)
-    plt.xticks(fontsize=fontsize_legends)
     plt.grid(True, linestyle='--')
-    plt.xticks(df["Processes"], labels=[str(int(x))
-               for x in df["Processes"]], fontsize=fontsize_legends)
+
+    xticks = df["Processes"].values
+    xticks = xticks[xticks != xticks[-2]]
+    plt.xticks(xticks, labels=[str(int(x))
+               for x in xticks], fontsize=fontsize_legends)
     plt.tight_layout()
 
     if file_name:
@@ -177,13 +179,6 @@ def plot_daily_new_transmissions(files, start_date, tmax, legend_labels, file_na
     plt.ylim(bottom=0)
     plt.xlabel('Simulation time [days]', fontsize=fontsize_labels)
     plt.xlim(left=0, right=tmax-1)
-    # Define x-ticks as dates.
-    # datelist = np.array(pd.date_range(start_date.date(),
-    #                                   periods=tmax, freq='D').strftime('%m-%d').tolist())
-    # tick_range = (np.arange(int((tmax - 1) / 5) + 1) * 5)
-    # plt.xticks(tick_range, datelist[tick_range],
-    #            rotation=45, fontsize=12)
-    # plt.xticks(np.arange(tmax), minor=True)
 
     plt.legend(legend_labels, fontsize=fontsize_legends, framealpha=0.5)
     plt.grid(True, linestyle='--')
@@ -210,18 +205,18 @@ def main():
     tmax = 30
 
     # Runtime plot
-    file_name = 'runtimes'
+    file_name = 'scaling_16384'
     paths_to_file = os.path.join(result_dir, file_name)
     extract_json_segments(paths_to_file+'.txt', paths_to_file+'.json')
     plot_scaling(paths_to_file+'.json', file_name)
 
     # Percentile plot
-    plot_daily_new_transmissions([os.path.join(result_dir, "lct_2020-10-1_subcomp0_np128_percentiles_p5"), os.path.join(result_dir, "lct_2020-10-1_subcomp0_np128_percentiles_p25"),
-                                  os.path.join(result_dir, "lct_2020-10-1_subcomp0_np128_percentiles_p50"), os.path.join(result_dir, "lct_2020-10-1_subcomp0_np128_percentiles_p75"), os.path.join(result_dir, "lct_2020-10-1_subcomp0_np128_percentiles_p95"),],
+    plot_daily_new_transmissions([os.path.join(result_dir, "lct_2020-10-1_subcomp0_np168_percentiles_p5"), os.path.join(result_dir, "lct_2020-10-1_subcomp0_np168_percentiles_p25"),
+                                  os.path.join(result_dir, "lct_2020-10-1_subcomp0_np168_percentiles_p50"), os.path.join(result_dir, "lct_2020-10-1_subcomp0_np168_percentiles_p75"), os.path.join(result_dir, "lct_2020-10-1_subcomp0_np168_percentiles_p95"),],
                                  start_date_timestamp, tmax,
                                  legend_labels=list(
         ["p05", "p25", "p50", "p75", "p95"]),
-        file_name="ensemble_runs")
+        file_name="percentiles_new_transmissions")
 
 
 if __name__ == "__main__":

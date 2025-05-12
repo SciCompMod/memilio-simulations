@@ -50,7 +50,7 @@ day_oct=1
 scale_contacts_oct=0.6072
 npi_size_oct=0.3
 scale_confirmed_cases_oct=1.2
-num_runs=1024 #16384
+num_runs=16384 #1024
 
 # Compile with different numbers of subcompartments and run simulations.
 # Additionally: Setup with numbers of subcompartments so that each corresponds to the approximate stay time in the compartment.

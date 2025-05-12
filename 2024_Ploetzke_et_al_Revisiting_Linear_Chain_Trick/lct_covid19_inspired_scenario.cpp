@@ -213,16 +213,16 @@ void print_average_contacts(mio::UncertainContactMatrix<ScalarType> contact_matr
  * 
  * @param[in,out] contact_matrices The contact matrices where the NPIs should be added to.
  */
-void set_npi_october(mio::ContactMatrixGroup& contact_matrices)
-{
-    using namespace params;
-    auto offset_npi = mio::SimulationTime(mio::get_offset_in_days(mio::Date(2020, 10, 25), start_date));
-    for (auto&& contact_location : contact_locations) {
-        contact_matrices[size_t(contact_location.first)].add_damping(
-            Eigen::MatrixXd::Constant(num_groups, num_groups, npi_size),
-            offset_npi); // no uncertain: internal type is MatrixXd
-    }
-}
+// void set_npi_october(mio::ContactMatrixGroup& contact_matrices)
+// {
+//     using namespace params;
+//     auto offset_npi = mio::SimulationTime(mio::get_offset_in_days(mio::Date(2020, 10, 25), start_date));
+//     for (auto&& contact_location : contact_locations) {
+//         contact_matrices[size_t(contact_location.first)].add_damping(
+//             Eigen::MatrixXd::Constant(num_groups, num_groups, npi_size),
+//             offset_npi); // no uncertain: internal type is MatrixXd
+//     }
+// }
 
 /**
  * @brief Set the contact pattern from data files.
@@ -252,9 +252,25 @@ mio::IOResult<mio::UncertainContactMatrix<ScalarType>> get_contact_matrix(std::s
 
     // Add NPIs to the contact matrices.
     mio::Date end_date     = mio::offset_date_by_days(start_date, (int)tmax);
-    auto start_npi_october = mio::Date(2020, 10, 25);
+    auto start_npi_october = mio::Date(2020, 10, 11);
     if ((int)(start_npi_october < end_date) & (int)(start_date < start_npi_october)) {
-        set_npi_october(contact_matrices);
+        auto offset_npi = mio::SimulationTime(mio::get_offset_in_days(start_npi_october, start_date));
+        for (auto&& contact_location : contact_locations) {
+            contact_matrices[size_t(contact_location.first)].add_damping(
+                Eigen::MatrixXd::Constant(num_groups, num_groups, 0.4),
+                offset_npi); // no uncertain: internal type is MatrixXd
+        }
+    }
+
+    // Add NPIs to the contact matrices.
+    start_npi_october = mio::Date(2020, 10, 21);
+    if ((int)(start_npi_october < end_date) & (int)(start_date < start_npi_october)) {
+        auto offset_npi = mio::SimulationTime(mio::get_offset_in_days(start_npi_october, start_date));
+        for (auto&& contact_location : contact_locations) {
+            contact_matrices[size_t(contact_location.first)].add_damping(
+                Eigen::MatrixXd::Constant(num_groups, num_groups, 0.1),
+                offset_npi); // no uncertain: internal type is MatrixXd
+        }
     }
     return mio::success(mio::UncertainContactMatrix<ScalarType>(contact_matrices));
 }
@@ -378,7 +394,7 @@ mio::IOResult<void> simulate(std::string const& contact_data_dir, std::string co
         printf("%s\n", init.error().formatted_message().c_str());
         return init;
     }
-
+    mio::set_log_level(mio::LogLevel::off);
     // Set integrator of fifth order with fixed step size and perform simulation.
     auto integrator =
         std::make_shared<mio::ControlledStepperWrapper<ScalarType, boost::numeric::odeint::runge_kutta_cash_karp54>>();
@@ -453,7 +469,7 @@ mio::IOResult<void> simulate(std::string const& contact_data_dir, std::string co
                 BOOST_OUTCOME_TRY(
                     mio::save_result({populations_p75}, {0}, 1,
                                      filename + "_np" + std::to_string(num_processes) + "_percentiles_p75.h5"));
-                mio::TimeSeries<ScalarType> populations_p25 =
+                mio::TimeSeries<ScalarType> populations_p95 =
                     sum_age_groups(model.calculate_compartments(ensemble_results_p95));
                 BOOST_OUTCOME_TRY(
                     mio::save_result({populations_p95}, {0}, 1,
@@ -461,7 +477,7 @@ mio::IOResult<void> simulate(std::string const& contact_data_dir, std::string co
             }
         }
     }
-
+    mio::set_log_level(mio::LogLevel::warn);
     return mio::success();
 }
 
