@@ -55,7 +55,7 @@ if(BUILD_munich_graph_sim)
   execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/munich_graph_sim/build")
 endif()
 
-if(BUILD_abm_test_bs_simulation)
+if(BUILD_2025_Kerkmann_Korf_et_al_Testing)
   if(NOT EXISTS "${CMAKE_SOURCE_DIR}/2025_Kerkmann_Korf_et_al_agent_based_model_testing/build")
     execute_process(COMMAND mkdir "build/" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2025_Kerkmann_Korf_et_al_agent_based_model_testing")
   endif()
