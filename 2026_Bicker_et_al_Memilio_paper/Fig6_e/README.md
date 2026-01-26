@@ -4,6 +4,7 @@
 
 - **MEmilio**: See `git_tag.cmake` for the required version.
 - **Python**: Required for plotting results and the Python benchmark script.
+- **R**: See [src/dependencies](https://github.com/kilianvolmer/OpenCOVID/blob/main/src/dependencies.R) for required packages.
 
 ## Files
 
@@ -33,3 +34,6 @@
     python3 plot_hybrid_scaling.py
     ```
     Note, that this script uses the general configuration file 'plottings_settins.py'.
+
+5. **OpenCOVID benchmark**
+   Clone [our fork](https://github.com/kilianvolmer/OpenCOVID) of [OpenCOVID](https://github.com/SwissTPH/OpenCOVID) and run the `src/bash_launch.sh` file. Alternatively, you can directly execute the `src/launch.sh` file in R.
