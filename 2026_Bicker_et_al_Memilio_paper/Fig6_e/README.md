@@ -1,4 +1,4 @@
-# Figure 6d: Hybrid-OSECIR-dABM scaling
+# Figure 6e:ABM scaling
 
 ## Requirements
 
