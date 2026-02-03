@@ -1,4 +1,4 @@
-# Figure 6e:ABM scaling
+# Figure 6c and 6f: Scaling
 
 ## Requirements
 
@@ -9,10 +9,10 @@
 ## Files
 
 - **C++/Python Simulations**:
-    - `abm_benchmark_strong.cpp`: Main simulation file for strong sclaing with multiple nodes as well as one node.
+    - `abm_benchmark_strong.cpp`: Main simulation file for strong scaling with multiple nodes as well as one node.
     - `abm_benchmark_scaling.cpp`: Main simulation file for runtime/population scaling for the MEmilio-ABM with 1/4/16 cores.
     - `covasim_benchmark.py`: Main simulation file for runtime/population scaling for the Covasim-ABM.
-    - https://github.com/kilianvolmer/OpenCOVID/tree/main : Repository where the exeuction of the OpenCOVID was handled.
+    - https://github.com/kilianvolmer/OpenCOVID/tree/main : Repository where the execution of the OpenCOVID was handled.
 - **Plotting**:
     - `benchmark_results.py`: Generates Fig. 6d from outputs of scaling_dabm_ode_hybrid.cpp.
 

@@ -1,7 +1,7 @@
-/*
+/* 
 * Copyright (C) 2020-2025 MEmilio
 *
-* Authors: Rene Schmieding, Sascha Korf
+* Authors: Daniel Abele
 *
 * Contact: Martin J. Kuehn <Martin.Kuehn@DLR.de>
 *
@@ -17,31 +17,15 @@
 * See the License for the specific language governing permissions and
 * limitations under the License.
 */
-#include "abm/result_simulation.h"
-#include "abm/household.h"
-#include "abm/lockdown_rules.h"
-#include "abm/model.h"
-#include "abm/time.h"
-#include "memilio/timer/auto_timer.h"
-
-#include "memilio/compartments/parameter_studies.h"
-#include "memilio/data/analyze_result.h"
-#include "memilio/io/io.h"
-#include "memilio/io/result_io.h"
-#include "memilio/utils/base_dir.h"
-#include "memilio/utils/logging.h"
-#include "memilio/utils/miompi.h"
-#include "memilio/utils/random_number_generator.h"
-#include "memilio/utils/stl_util.h"
+#include "abm/simulation.h"
+#include "abm/common_abm_loggers.h"
+#include "benchmark/benchmark.h"
 #include "abm/city_builder.h"
 
-#include <string>
-
-// constexpr size_t num_age_groups = 5;
-
-/// An ABM setup taken from abm_minimal.cpp.
-mio::abm::Model make_model(size_t num_persons, mio::RandomNumberGenerator& rng)
+mio::abm::Simulation<> make_simulation(size_t num_persons, std::initializer_list<uint32_t> seeds)
 {
+    auto rng = mio::RandomNumberGenerator();
+    rng.seed(seeds);
 
     auto model = CityBuilder::build_world(CityConfig{static_cast<int>(num_persons)}, rng);
 
@@ -58,73 +42,102 @@ mio::abm::Model make_model(size_t num_persons, mio::RandomNumberGenerator& rng)
         }
     }
 
-    return model;
+    return mio::abm::Simulation(mio::abm::TimePoint(0), std::move(model));
 }
 
-int main()
+/**
+ * Benchmark for the ABM simulation.
+ * @param num_persons Number of persons in the simulation.
+ * @param seeds Seeds for the random number generator.
+ */
+void abm_benchmark(benchmark::State& state, size_t num_persons, std::initializer_list<uint32_t> seeds)
 {
-    mio::mpi::init();
+    mio::set_log_level(mio::LogLevel::warn);
 
-    mio::set_log_level(mio::LogLevel::off);
+    for (auto&& _ : state) {
+        state.PauseTiming(); //exclude the setup from the benchmark
+        auto sim = make_simulation(num_persons, seeds);
+        state.ResumeTiming();
 
-    // Set start and end time for the simulation.
-    auto t0   = mio::abm::TimePoint(0);
-    auto tmax = t0 + mio::abm::days(14);
-    // Set the number of simulations to run in the study
-    const size_t num_runs = 128;
+        //simulated time should be long enough to have full infection runs and mobility to every location
+        auto final_time = sim.get_time() + mio::abm::days(5);
+        mio::History<mio::DataWriterToMemory, mio::abm::LogDataForMobility> history;
+        sim.advance(final_time);
 
-    // Create a parameter study.
-    // Note that the study for the ABM currently does not make use of the arguments "parameters" or "dt", as we create
-    // a new model for each simulation. Hence we set both arguments to 0.
-    // This is mostly due to https://github.com/SciCompMod/memilio/issues/1400
-    mio::ParameterStudy study(0, t0, tmax, mio::abm::TimeSpan(0), num_runs);
+        //debug output can be enabled to check for unexpected results (e.g. infections dieing out)
+        //normally should have no significant effect on runtime
+        const bool monitor_infection_activity = false;
+        if constexpr (monitor_infection_activity) {
+            std::cout << "num_persons = " << num_persons << "\n";
+            for (auto inf_state = 0; inf_state < (int)mio::abm::InfectionState::Count; inf_state++) {
+                std::cout << "inf_state = " << inf_state << ", sum = "
+                          << sim.get_model().get_subpopulation_combined(sim.get_time(),
+                                                                        mio::abm::InfectionState(inf_state))
+                          << "\n";
+            }
+        }
+    }
+}
 
-    mio::timing::AutoTimer<"abm_timer"> timer;
+//Measure ABM simulation run time with different sizes and different seeds.
+//Fixed RNG seeds to make runs comparable. When there are code changes, the simulation will still
+//run differently due to different sequence of random numbers being drawn. But for large enough sizes
+//RNG should average out, so runs should be comparable even with code changes.
+//We run a few different benchmarks to hopefully catch abnormal cases. Then seeds may
+//have to be adjusted to get the benchmark back to normal.
+//For small sizes (e.g. 10k) extreme cases are too likely, i.e. infections die out
+//or overwhelm everything, so we don't benchmark these. Results should be mostly transferrable.
 
-    // Optional: set seeds to get reproducable results
-    study.get_rng().seed({12341234, 53456, 63451, 5232576, 84586, 52345});
+int main(int argc, char** argv)
+{
+    // Default problem size
+    size_t num_persons = 1000;
 
-    const std::string result_dir = mio::path_join(mio::base_dir(), "example_results");
-    std::cout << "Writing results to " << result_dir << std::endl;
-    if (!mio::create_directory(result_dir)) {
-        mio::log_error("Could not create result directory \"{}\".", result_dir);
+    //print omp_threads
+#ifdef MEMILIO_ENABLE_OPENMP
+    int omp_threads = 1;
+#pragma omp parallel
+    {
+#pragma omp single
+        omp_threads = omp_get_num_threads();
+    }
+    std::cout << "Running ABM benchmark with " << omp_threads << " OpenMP threads.\n";
+#else
+    std::cout << "Running ABM benchmark without OpenMP.\n";
+#endif
+
+    // Parse custom arguments for problem size BEFORE benchmark::Initialize
+    // Remove custom args from argv to prevent benchmark from seeing them
+    std::vector<char*> filtered_argv;
+    filtered_argv.push_back(argv[0]); // Keep program name
+
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg.find("--num_persons=") == 0) {
+            num_persons = std::stoul(arg.substr(14));
+            // Don't add this to filtered_argv
+        }
+        else {
+            // Keep other arguments for benchmark
+            filtered_argv.push_back(argv[i]);
+        }
+    }
+
+    // Update argc to reflect filtered arguments
+    int filtered_argc = static_cast<int>(filtered_argv.size());
+
+    // Register the benchmark with the specified problem size
+    std::string benchmark_name = "abm_benchmark_" + std::to_string(num_persons);
+    benchmark::RegisterBenchmark(benchmark_name.c_str(), [num_persons](benchmark::State& state) {
+        abm_benchmark(state, num_persons, {1415921265u, 35897932u});
+    })->Unit(benchmark::kMillisecond);
+
+    // Initialize and run benchmarks with filtered arguments
+    benchmark::Initialize(&filtered_argc, filtered_argv.data());
+    if (benchmark::ReportUnrecognizedArguments(filtered_argc, filtered_argv.data())) {
         return 1;
     }
-
-    auto ensemble_results = study.run(
-        [](auto, auto t0_, auto, size_t) {
-            return mio::abm::ResultSimulation(make_model(2'000'000, mio::thread_local_rng()), t0_);
-        },
-        [result_dir](auto&& sim, auto&& run_idx) {
-            auto interpolated_result = mio::interpolate_simulation_result(sim.get_result());
-            std::string outpath = mio::path_join(result_dir, "abm_minimal_run_" + std::to_string(run_idx) + ".txt");
-            std::ofstream outfile_run(outpath);
-            sim.get_result().print_table(outfile_run, {"S", "E", "I_NS", "I_Sy", "I_Sev", "I_Crit", "R", "D"}, 7, 4);
-            std::cout << "Results written to " << outpath << std::endl;
-            auto params = std::vector<mio::abm::Model>{};
-            return std::vector{interpolated_result};
-        });
-
-    if (ensemble_results.size() > 0) {
-        auto ensemble_results_p05 = ensemble_percentile(ensemble_results, 0.05);
-        auto ensemble_results_p25 = ensemble_percentile(ensemble_results, 0.25);
-        auto ensemble_results_p50 = ensemble_percentile(ensemble_results, 0.50);
-        auto ensemble_results_p75 = ensemble_percentile(ensemble_results, 0.75);
-        auto ensemble_results_p95 = ensemble_percentile(ensemble_results, 0.95);
-
-        mio::unused(save_result(ensemble_results_p05, {0}, 8,
-                                mio::path_join(result_dir, "Results_" + std::string("p05") + ".h5")));
-        mio::unused(save_result(ensemble_results_p25, {0}, 8,
-                                mio::path_join(result_dir, "Results_" + std::string("p25") + ".h5")));
-        mio::unused(save_result(ensemble_results_p50, {0}, 8,
-                                mio::path_join(result_dir, "Results_" + std::string("p50") + ".h5")));
-        mio::unused(save_result(ensemble_results_p75, {0}, 8,
-                                mio::path_join(result_dir, "Results_" + std::string("p75") + ".h5")));
-        mio::unused(save_result(ensemble_results_p95, {0}, 8,
-                                mio::path_join(result_dir, "Results_" + std::string("p95") + ".h5")));
-    }
-
-    mio::mpi::finalize();
-
+    benchmark::RunSpecifiedBenchmarks();
+    benchmark::Shutdown();
     return 0;
 }
