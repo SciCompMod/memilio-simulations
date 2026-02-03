@@ -9,8 +9,8 @@
 ## Files
 
 - **C++/Python Simulations**:
-    - `abm_parameter_study.cpp`: Main simulation file for strong sclaing with multiple nodes as well as one node.
-    - `abm.cpp`: Main simulation file for runtime/population scaling for the MEmilio-ABM with 1/4/16 cores.
+    - `abm_benchmark_strong.cpp`: Main simulation file for strong sclaing with multiple nodes as well as one node.
+    - `abm_benchmark_scaling.cpp`: Main simulation file for runtime/population scaling for the MEmilio-ABM with 1/4/16 cores.
     - `covasim_benchmark.py`: Main simulation file for runtime/population scaling for the Covasim-ABM.
     - https://github.com/kilianvolmer/OpenCOVID/tree/main : Repository where the exeuction of the OpenCOVID was handled.
 - **Plotting**:
