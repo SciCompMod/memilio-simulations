@@ -24,8 +24,8 @@
 2. **Run C++ Simulations**:
     Execute the compiled C++ simulation binary:
     ```bash
-    ./bin/abm
-    ./bin/abm_parameter_study 
+    ./bin/abm_benchmark_scaling
+    ./bin/abm_benchmark_strong 
     ```
 
 4.  **Generate Plots**:
