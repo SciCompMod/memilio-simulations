@@ -1,0 +1,9 @@
+_deps/memilio-src/pycode/memilio-simulation
+_deps/memilio-src/pycode/memilio-epidata
+scipy
+matplotlib
+pandas
+geopandas
+pyspainmobility 
+bayesflow==2.0.8  # The simulations for Spain were run with 2.0.7
+tensorflow
