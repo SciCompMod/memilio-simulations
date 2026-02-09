@@ -1,4 +1,4 @@
-# Figure 4: Fits of the ODE SECIR-type model for SARS-CoV-2 related ICU cases in Germany for national and district level
+# Figure 4: Fits of the ODE SECIR-type model for SARS-CoV-2 related ICU cases in Germany and Spain for national and district level
 
 ## Requirements
 
@@ -11,10 +11,10 @@
 - **Data gathering**:
     - `getSimulationDataSpain.py`: Get the data for the simulations of Spain.
 - **Python Simulations**:
-    - `graph_germany_nuts0.py`: Simulation, fitting and plots of the Germany model without spatial resolution.
-    - `graph_germany_nuts3.py`: Simulation, fitting and plots of the Germany model with spatial resolution on county level.
-    - `graph_spain_nuts0.py`: Simulation, fitting and plots of the Spain model without spatial resolution.
-    - `graph_spain_nuts3.py`: Simulation, fitting and plots of the Spain model with spatial resolution on provinces level.
+    - `graph_germany_nuts0.py`: Simulation, fitting and plots of the Germany model without spatial resolution (Fig. 4d, top).
+    - `graph_germany_nuts3.py`: Simulation, fitting and plots of the Germany model with spatial resolution on county level (Fig. 4d, bottom).
+    - `graph_spain_nuts0.py`: Simulation, fitting and plots of the Spain model without spatial resolution (Fig. 4e, top).
+    - `graph_spain_nuts3.py`: Simulation, fitting and plots of the Spain model with spatial resolution on provinces level (Fig. 4e, bottom).
 
 ## How to Run
 
