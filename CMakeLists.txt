@@ -11,6 +11,7 @@ option(BUILD_2024_Ploetzke_et_al_Revisiting "Build simulations from folder 2024_
 option(BUILD_2024_Wendler_et_al_Nonstandard "Build simulations from folder 2024_Wendler_et_al_Nonstandard_Numerical_Scheme_IDE." OFF)
 option(BUILD_munich_graph_sim "Build simulations from folder munich_graph_sim." OFF)
 option(BUILD_2025_Kerkmann_Korf_et_al_Testing "Build simulations from folder ABM_TEST_BS_simulation." OFF)
+option(BUILD_2026_Bicker_et_al_Memilio_paper "Build simulations from folder 2026_Bicker_et_al_Memilio_paper." OFF)
 
 # We require the library hdf5 for all targets.
 find_package(HDF5 REQUIRED)
@@ -61,4 +62,12 @@ if(BUILD_2025_Kerkmann_Korf_et_al_Testing)
   endif()
   execute_process(COMMAND cmake ".." WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2025_Kerkmann_Korf_et_al_agent_based_model_testing/build")
   execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2025_Kerkmann_Korf_et_al_agent_based_model_testing/build")
+endif()
+
+if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_d)
+  if(NOT EXISTS "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_d/build")
+    execute_process(COMMAND mkdir "build/" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_d")
+  endif()
+  execute_process(COMMAND cmake ".." WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_d/build")
+  execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_d/build")
 endif()
