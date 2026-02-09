@@ -5,7 +5,7 @@ import requests
 import numpy as np
 
 from pyspainmobility import Mobility, Zones
-import defaultDict as dd
+from memilio.epidata import defaultDict as dd
 
 from memilio.epidata import getDataIntoPandasDataFrame as gd
 
@@ -292,7 +292,7 @@ if __name__ == "__main__":
     moving_average = 7
 
     data_dir = os.path.join(os.path.dirname(
-        os.path.abspath(__file__)), "../../../../data/Spain")
+        os.path.abspath(__file__)), "build/_deps/memilio-src/data/Spain")
     pydata_dir = os.path.join(data_dir, 'pydata')
     os.makedirs(pydata_dir, exist_ok=True)
     mobility_dir = os.path.join(data_dir, 'mobility/')
