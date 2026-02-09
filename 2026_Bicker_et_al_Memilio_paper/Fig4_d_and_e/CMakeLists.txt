@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 
-project(memilio-simulations-2026_Bicker_et_al_Memilio_paper-Fig4_d VERSION 1.0.0)
+project(memilio-simulations-2026_Bicker_et_al_Memilio_paper-Fig4_d_and_e VERSION 1.0.0)
 
 # Executables should be stored in the build/bin/ folder.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")

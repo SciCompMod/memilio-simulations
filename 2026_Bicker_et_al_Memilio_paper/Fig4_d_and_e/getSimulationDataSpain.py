@@ -206,16 +206,6 @@ def get_mobility_data(data_dir, start_date='2022-08-01', end_date='2022-08-31', 
 
 
 def get_comunidadid_to_provinciaids_map():
-    """ Creates a hash map from state IDs to lists of county IDs
-
-    :param merge_eisenach: Default: True] Defines whether the counties
-        'Wartburgkreis' and 'Eisenach' are listed separately or combined
-        as one entity 'Wartburgkreis'.
-    :param zfill: Default: False]. Defines whether or not all IDs are returned
-        as zero-filled strings. By default, integer maps are returned.
-    :returns: State IDs to lists of county IDs map
-
-    """
     provincia_ids = [k for k in dd.Provincias.keys() if k not in {
         530, 630, 640, 701, 702}]
     comunidad_ids = list(sorted({k // 10 for k in provincia_ids}))
