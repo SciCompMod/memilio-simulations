@@ -12,6 +12,8 @@
 - **Plotting**:
     - `plot_hybrid_scaling.py`: Generates Fig. 6d from outputs of scaling_dabm_ode_hybrid.cpp.
 
+The files described above can be found under `https://github.com/SciCompMod/memilio/tree/paper-compare-abm-ide-lct-ode/cpp/examples/paper`.
+
 ## How to Run
 
 1.  **Build C++ Benchmarks**:

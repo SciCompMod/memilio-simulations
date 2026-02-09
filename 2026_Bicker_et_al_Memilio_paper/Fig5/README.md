@@ -17,6 +17,8 @@
     - `plot_model_comparison.py`: Generates Fig. 5e from outputs of abm_ide_lct_ode.cpp.
     - `plot_pdfs.py`: Plots probability density function of distributions used for Fig.5e.
 
+The files described above can be found under `https://github.com/SciCompMod/memilio/tree/paper-compare-abm-ide-lct-ode/cpp/examples/paper`.
+
 ## How to Run
 
 1.  **Build C++ Benchmarks**:
