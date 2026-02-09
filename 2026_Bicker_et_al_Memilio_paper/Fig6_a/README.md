@@ -21,6 +21,8 @@ This folder contains the benchmarks comparing the C++ implementation of the SEIR
 - **Plotting**:
     - `plot_speedup_seir_metapop.py`: Generic script to plot speedup results.
 
+The implementation of the model can be found under `https://github.com/SciCompMod/memilio/tree/1003-ode-seir-metapop-add-bindings`.
+
 ## How to Run
 
 1.  **Build C++ Benchmarks**:
