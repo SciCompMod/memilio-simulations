@@ -14,6 +14,7 @@ option(BUILD_munich_graph_sim "Build simulations from folder munich_graph_sim." 
 option(BUILD_2025_Kerkmann_Korf_et_al_Testing "Build simulations from folder ABM_TEST_BS_simulation." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_d "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 4d." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig5 "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 5." OFF)
+option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_a "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 6a." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_d "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 6d." OFF)
 
 # We require the library hdf5 for all targets.
@@ -89,6 +90,15 @@ if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig5)
 
   execute_process(COMMAND cmake ".." WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig5/build")
   execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig5/build")
+endif()
+
+if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_a)
+  if(NOT EXISTS "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_a/build")
+    execute_process(COMMAND mkdir "build/" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_a")
+  endif()
+
+  execute_process(COMMAND cmake ".." WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_a/build")
+  execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_a/build")
 endif()
 
 if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_d)
