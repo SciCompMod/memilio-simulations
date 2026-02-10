@@ -129,26 +129,32 @@ endif()
 
 If the simulation is based on a developement branch with changes that are not merged into the main branch of MEmilio,
 you should create a patch file relative to a commit on the main branch (preferably the most recent one).
-You can create a patch file by using
+You can create a patch file from within the main MEmilio repository by using
 
 ```bash
 git diff --patch --ignore-space-change --minimal --output=<MyBranch>.patch $(git merge-base <MyBranch> main)..<MyBranch>
 ```
 
-where "MyBranch" is replaced by the name of the developement branch. The commit hash obtained from
+where "MyBranch" is replaced by the name of the developement branch.
+You can restrict the patch to certain directories (like "cpp/memilio") by adding paths to the end of this command.
+The commit hash obtained from
 `git merge-base <MyBranch> main`
 must then also be used as GIT_TAG_MEMILIO.
 
 Then, move the patch file to `<FolderName>`, and add the following two items to the CMakeLists.txt there:
 
-First, set the patch command:
+First, set the patch command above the `FetchContent_Declare(memilio ... )`:
 ```bash
 set(memilio_patch git apply ${CMAKE_CURRENT_SOURCE_DIR}/<MyBranch>.patch)
 ```
 
-Second, add the following two items to the end of the `FetchContent_Declare(memilio ... )`:
+Second, add the following two items to the end of the arguments in `FetchContent_Declare(memilio ... )`:
 ```bash
+FetchContent_Declare(
+  memilio
+  ...
   PATCH_COMMAND ${memilio_patch}
   UPDATE_DISCONNECTED 1
+)
 ```
 The first line allows for applying the patch when memilio is included, the second makes sure this only happens once. 
