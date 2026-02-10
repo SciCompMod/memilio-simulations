@@ -1,0 +1,11 @@
+_deps/memilio-src/pycode/memilio-simulation
+_deps/memilio-src/pycode/memilio-surrogatemodel
+tensorflow
+spektral
+pandas
+numpy
+matplotlib
+scikit-learn
+progress
+scikit-build
+pyfakefs
