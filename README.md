@@ -28,6 +28,8 @@ The following `<OPTION>`s can be set:
 - `BUILD_2024_Wendler_et_al_Nonstandard`
 - `BUILD_munich_graph_sim`
 - `BUILD_2025_Kerkmann_Korf_et_al_Testing`
+- Figures for the MEmilio paper (2026_Bicker_et_al_Memilio_paper). Note that each Figure has its own subdirectory.
+  - `2026_Bicker_et_al_Memilio_paper-Fig6_d` 
 
 If you do not set an option, no simulation will be built. After a simulation has been built, you can prevent cmake from rebuilding it by setting `cmake .. -D<OPTION>=OFF`, although rebuilding should only take a few seconds. You can also set multiple options at once by adding more pairs `-D<OPTION>=<VALUE>` to the end, with `<VALUE>` being either `ON` or `OFF`.
 
@@ -50,11 +52,12 @@ For most simulations, we require the libraries `JsonCpp` and `HDF5` for running 
 
 If you want to create a new folder, e.g. for the files of a new paper, you should follow the steps below:
 
-- Create a folder with a descriptive name. Typically, we use `<Year>_<FirstAuthor>_et_al_<FirstWordTitle>_<AdditionalWords>`.
-The name should clearly indicate the paper to which the folder is related.
+- Create a folder with a descriptive name, referenced in the following as `<FolderName>`.
+  Typically, we use `<Year>_<FirstAuthor>_et_al_<FirstWordTitle>_<AdditionalWords>`.
+  The name should clearly indicate the paper to which the folder is related.
 - Put all related files in it.
 - In a file `git_tag.cmake`, define a git tag for the MEmilio version used (can be a commit hash or a branch name).
-This is done using the line
+  This is done using the line
 
 ```bash
 set(GIT_TAG_MEMILIO <commit_hash>)
@@ -121,3 +124,31 @@ endif()
 ```
 
 - Clearly state all requirements in your local `README.md` (e.g. hdf5) as we cannot access the MEmilio variables MEMILIO_HAS... to control the requirements in CMake.
+
+### Making and applying patches
+
+If the simulation is based on a developement branch with changes that are not merged into the main branch of MEmilio,
+you should create a patch file relative to a commit on the main branch (preferably the most recent one).
+You can create a patch file by using
+
+```bash
+git diff --patch --ignore-space-change --minimal --output=<MyBranch>.patch $(git merge-base <MyBranch> main)..<MyBranch>
+```
+
+where "MyBranch" is replaced by the name of the developement branch. The commit hash obtained from
+`git merge-base <MyBranch> main`
+must then also be used as GIT_TAG_MEMILIO.
+
+Then, move the patch file to `<FolderName>`, and add the following two items to the CMakeLists.txt there:
+
+First, set the patch command:
+```bash
+set(memilio_patch git apply ${CMAKE_CURRENT_SOURCE_DIR}/<MyBranch>.patch)
+```
+
+Second, add the following two items to the end of the `FetchContent_Declare(memilio ... )`:
+```bash
+  PATCH_COMMAND ${memilio_patch}
+  UPDATE_DISCONNECTED 1
+```
+The first line allows for applying the patch when memilio is included, the second makes sure this only happens once. 
