@@ -15,15 +15,21 @@
 
 The files described above can be found under `https://github.com/SciCompMod/memilio/tree/1139-introduce-improved-gnn-surrogate-models`.
 
+The pre-trained model weights for the GNN surrogate used in the benchmarks are available on Zenodo at [https://doi.org/10.5281/zenodo.18507331](https://doi.org/10.5281/zenodo.18507331).
+
 ## How to Run
 
-1.  **Run Benchmark**:
+1.  **Install the project**:
+    Configure the project using CMake. This will create a virtual environment and install the necessary packages (including `memilio-simulation` and `memilio-surrogatemodel`).
+
+2.  **Run Benchmark**:
     Execute the Python benchmark script to generate the runtime data (`measurements_gnn_vs_ode.csv`).
     ```bash
-    python3 measure_gnn_graphODE_runtime.py
+    source build/venv/bin/activate
+    python measure_gnn_graphODE_runtime.py
     ```
 
-2.  **Generate Plots**:
+3.  **Generate Plots**:
     Use the plotting script to visualize the results:
     ```bash
     python3 plot_6e.py

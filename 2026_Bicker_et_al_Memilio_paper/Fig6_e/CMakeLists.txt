@@ -23,3 +23,7 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(memilio)
+
+add_custom_target(install_memilio_py ALL
+  COMMAND bash ../install.sh
+)
