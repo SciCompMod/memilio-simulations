@@ -169,9 +169,6 @@ auto sample_graph(mio::Graph<Model, mio::MobilityParameters<ScalarType>> params_
 
 mio::IOResult<void> simulate_ode_secir(std::string result_dir, size_t num_runs, size_t num_warm_up_runs, size_t num_regions)
 {
-    // std::vector<std::vector<mio::TimeSeries<ScalarType>>> ensemble_result(
-    //     num_runs,
-    //     std::vector<mio::TimeSeries<ScalarType>>(1, mio::TimeSeries<ScalarType>(int(mio::osecir::InfectionState::Count))));
 
     std::vector<ScalarType> init_time(num_runs);
     std::vector<ScalarType> sim_time(num_runs);
@@ -190,18 +187,16 @@ mio::IOResult<void> simulate_ode_secir(std::string result_dir, size_t num_runs, 
         timer.start();
         auto sim = sample_graph(params_graph);
         timer.stop();
-        init_time[run] = timer.get_elapsed_time();
+        init_time[run] = mio::timing::time_in_seconds(timer.get_elapsed_time());
         timer.reset();
         //Simulation
         timer.start();
         sim.advance(params::tmax);
         timer.stop();
-        sim_time[run] = timer.get_elapsed_time();
-        // ensemble_result[run][0] = mio::interpolate_simulation_result(sim.get_result());
+        sim_time[run] = mio::timing::time_in_seconds(timer.get_elapsed_time());
     }
 
     // Save ensemble results
-    // BOOST_OUTCOME_TRY(save_results(ensemble_result, result_dir, "osecir"));
     mio::TimeSeries<ScalarType> init_time_ts(1);
     mio::TimeSeries<ScalarType> sim_time_ts(1);
     for (size_t i = 0; i < num_runs; i++) {
@@ -214,37 +209,10 @@ mio::IOResult<void> simulate_ode_secir(std::string result_dir, size_t num_runs, 
     return mio::success();
 }
 
-// void simulate_ode_secir(size_t num_runs, size_t num_warm_up_runs, size_t num_regions)
-// {
-//     using namespace params;
-
-//     auto model = initialize_osecir();
-
-//     // Perform simulation several times and measure run times.
-//     // Warm up runs.
-//     mio::set_log_level(mio::LogLevel::off);
-//     for (size_t i = 0; i < num_warm_up_runs; i++) {
-//         mio::simulate<ScalarType, Model>(0, tmax, dt, model, integrator);
-//     }
-//     // Simulate one time to track the number of steps.
-//     auto result = mio::simulate<ScalarType, Model>(0, tmax, dt, model, integrator);
-//     std::cout << "\"Steps\": " << result.get_num_time_points() << "," << std::endl;
-
-//     // Runs with timing.
-//     ScalarType total = 0;
-//     for (size_t i = 0; i < num_runs; i++) {
-//         total -= omp_get_wtime();
-//         mio::simulate<ScalarType, Model>(0, tmax, dt, model, integrator);
-//         total += omp_get_wtime();
-//     }
-//     std::cout << "\"Time\": " << total / num_runs << "\n}," << std::endl;
-//     mio::set_log_level(mio::LogLevel::warn);
-// }
-
 int main(int argc, char** argv)
 {
     auto cli_parameters = mio::cli::ParameterSetBuilder()
-                          .add<"ResultDirectory">(mio::path_join(mio::base_dir(), "cpp/examples/simulation_paper_ode/results_runtime"))
+                          .add<"ResultDirectory">(mio::path_join(mio::base_dir(), "../../../results_runtime"))
                           .add<"NumberRuns">(100, {.alias = "nRun"})
                           .add<"NumberWarmupRuns">(10, {.alias = "nWURun"})
                           .add<"NumberRegions">(1000, {.alias = "nRegion"})

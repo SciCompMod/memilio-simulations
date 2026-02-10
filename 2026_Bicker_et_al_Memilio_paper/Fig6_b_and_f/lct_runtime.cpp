@@ -256,16 +256,6 @@ auto sample_graph(mio::Graph<Model, mio::MobilityParameters<ScalarType>> params_
 
 mio::IOResult<void> simulate(std::string result_dir, size_t num_runs, size_t num_warm_up_runs, size_t num_regions)
 {
-    // // Set integrator of fifth order.
-    // auto integrator =
-    //     std::make_unique<mio::ControlledStepperWrapper<ScalarType, boost::numeric::odeint::runge_kutta_cash_karp54>>();
-    // // Choose dt_min = dt_max to get a fixed step size.
-    // integrator->set_dt_min(dt);
-    // integrator->set_dt_max(dt);
-
-    // std::vector<std::vector<mio::TimeSeries<ScalarType>>> ensemble_result(
-    //     num_runs,
-    //     std::vector<mio::TimeSeries<ScalarType>>(1, mio::TimeSeries<ScalarType>(int(mio::osecir::InfectionState::Count))));
 
     std::vector<ScalarType> init_time(num_runs);
     std::vector<ScalarType> sim_time(num_runs);
@@ -284,13 +274,13 @@ mio::IOResult<void> simulate(std::string result_dir, size_t num_runs, size_t num
         timer.start();
         auto sim = sample_graph(params_graph);
         timer.stop();
-        init_time[run] = timer.get_elapsed_time();
+        init_time[run] = mio::timing::time_in_seconds(timer.get_elapsed_time());
         timer.reset();
         //Simulation
         timer.start();
         sim.advance(params::tmax);
         timer.stop();
-        sim_time[run] = timer.get_elapsed_time();
+        sim_time[run] = mio::timing::time_in_seconds(timer.get_elapsed_time());
         // ensemble_result[run][0] = mio::interpolate_simulation_result(sim.get_result());
     }
 
@@ -311,7 +301,7 @@ mio::IOResult<void> simulate(std::string result_dir, size_t num_runs, size_t num
 int main(int argc, char** argv)
 {
     auto cli_parameters = mio::cli::ParameterSetBuilder()
-                          .add<"ResultDirectory">(mio::path_join(mio::base_dir(), "cpp/examples/simulation_paper_lct/results_runtime"))
+                          .add<"ResultDirectory">(mio::path_join(mio::base_dir(), "../../../results_runtime"))
                           .add<"NumberRuns">(100, {.alias = "nRun"})
                           .add<"NumberWarmupRuns">(10, {.alias = "nWURun"})
                           .add<"NumberRegions">(10, {.alias = "nRegion"})

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 
-project(memilio-simulations-2026_Bicker_et_al_Memilio_paper-Fig6_b VERSION 1.0.0)
+project(memilio-simulations-2026_Bicker_et_al_Memilio_paper-Fig6_b_and_f VERSION 1.0.0)
 
 # Executables should be stored in the build/bin/ folder.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
@@ -27,7 +27,11 @@ FetchContent_MakeAvailable(memilio)
 set(MEMILIO_BUILD_TESTS OFF)
 set(MEMILIO_BUILD_EXAMPLES OFF)
 set(MEMILIO_BUILD_SIMULATIONS OFF)
-set(MEMILIO_ENABLE_OPENMP OFF)
+set(MEMILIO_ENABLE_OPENMP ON)
+set(MEMILIO_ENABLE_MPI ON)
+
+set(CMAKE_CXX_STANDARD "20")
+set(CMAKE_CXX_STANDARD_REQUIRED "20")
 
 # Add the subdirectory for MEmilio build.
 add_subdirectory(${memilio_SOURCE_DIR}/cpp ${memilio_BINARY_DIR})
@@ -41,3 +45,13 @@ target_link_libraries(sim_lct_runtime PRIVATE memilio lct_secir)
 add_executable(sim_ide_runtime ide_runtime.cpp)
 target_link_libraries(sim_ide_runtime PRIVATE memilio ide_secir)
 
+if(MEMILIO_ENABLE_MPI AND MEMILIO_ENABLE_OPENMP)
+    add_executable(sim_ode_ensemble_runs ode_ensemble_runs.cpp)
+    target_link_libraries(sim_ode_ensemble_runs PRIVATE memilio ode_secir)#  OpenMP::OpenMP_CXX MPI::MPI_CXX)
+
+    add_executable(sim_lct_ensemble_runs lct_ensemble_runs.cpp)
+    target_link_libraries(sim_lct_ensemble_runs PRIVATE memilio lct_secir)#  OpenMP::OpenMP_CXX MPI::MPI_CXX)
+
+    add_executable(sim_ide_ensemble_runs ide_ensemble_runs.cpp)
+    target_link_libraries(sim_ide_ensemble_runs PRIVATE memilio ide_secir)#  OpenMP::OpenMP_CXX MPI::MPI_CXX)
+endif()

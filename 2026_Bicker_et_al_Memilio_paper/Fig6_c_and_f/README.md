@@ -19,7 +19,7 @@
 ## How to Run
 
 1.  **Build C++ Benchmarks**:
-    Configure and build the project using CMake, ensuring the `memilio` library is checked out at the commit specified in `git_tag.cmake`. For details, see the Memilio documentation.
+    Configure the project using CMake as explained [here](../../README.md#configuring-using-cmake).
 
 2. **Run C++ Simulations**:
     Execute the compiled C++ simulation binary:

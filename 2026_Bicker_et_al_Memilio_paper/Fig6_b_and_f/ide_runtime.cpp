@@ -131,18 +131,16 @@ mio::IOResult<void> simulate(std::string result_dir, size_t num_runs, size_t num
         auto sim_graph = get_graph(num_regions);
         auto sim       = mio::make_no_mobility_sim(params::t0, std::move(sim_graph));
         timer.stop();
-        init_time[run] = timer.get_elapsed_time();
+        init_time[run] = mio::timing::time_in_seconds(timer.get_elapsed_time());
         timer.reset();
         //Simulation
         timer.start();
         sim.advance(params::tmax);
         timer.stop();
-        sim_time[run] = timer.get_elapsed_time();
-        // ensemble_result[run][0] = mio::interpolate_simulation_result(sim.get_result());
+        sim_time[run] = mio::timing::time_in_seconds(timer.get_elapsed_time());
     }
 
     // Save ensemble results
-    // BOOST_OUTCOME_TRY(save_results(ensemble_result, result_dir, "osecir"));
     mio::TimeSeries<ScalarType> init_time_ts(1);
     mio::TimeSeries<ScalarType> sim_time_ts(1);
     for (size_t i = 0; i < num_runs; i++) {
@@ -161,7 +159,7 @@ int main(int argc, char** argv)
 {
     auto cli_parameters = mio::cli::ParameterSetBuilder()
                               .add<"ResultDirectory">(
-                                  mio::path_join(mio::base_dir(), "cpp/examples/simulation_paper_ide/results_runtime"))
+                                  mio::path_join(mio::base_dir(), "../../../results_runtime"))
                               .add<"NumberRuns">(100, {.alias = "nRun"})
                               .add<"NumberWarmupRuns">(10, {.alias = "nWURun"})
                               .add<"NumberRegions">(10, {.alias = "nRegion"})

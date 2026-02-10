@@ -15,7 +15,7 @@
 ## How to Run
 
 1.  **Install the project**:
-    Configure the project using CMake. 
+    Configure the project using CMake as explained [here](../../README.md#configuring-using-cmake).
 
 2. **Run the simulation**:
     Run the example graph_germany_nuts3_ode.cpp with one of the four scenarios (0-4).

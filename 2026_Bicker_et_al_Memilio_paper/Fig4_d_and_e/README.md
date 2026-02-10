@@ -19,7 +19,7 @@
 ## How to Run
 
 1.  **Install the project**:
-    Configure the project using CMake. This already installs the necessary packages for the simulations.
+    Configure the project using CMake as explained [here](../../README.md#configuring-using-cmake). This already installs the necessary packages for the simulations, which takes approximately 15 minutes.
 
 2. **Download the required data**:
     Download the data for Germany by running 
