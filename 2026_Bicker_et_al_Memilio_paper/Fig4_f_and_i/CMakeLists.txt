@@ -23,6 +23,9 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(memilio)
 
+set(CMAKE_CXX_STANDARD "20")
+set(CMAKE_CXX_STANDARD_REQUIRED "20")
+
 # Disable some options for the build.
 set(MEMILIO_BUILD_TESTS OFF)
 set(MEMILIO_BUILD_EXAMPLES OFF)
@@ -33,7 +36,7 @@ set(MEMILIO_ENABLE_OPENMP OFF)
 add_subdirectory(${memilio_SOURCE_DIR}/cpp ${memilio_BINARY_DIR})
 
 add_executable(sim_graph_germany_nuts3_ode graph_germany_nuts3_ode.cpp)
-target_link_libraries(sim_graph_germany_nuts3_ode PRIVATE memilio ode_secir std)
+target_link_libraries(sim_graph_germany_nuts3_ode PRIVATE memilio ode_secir)
 
 add_custom_target(install_requirements_py ALL
   COMMAND bash ../install.sh

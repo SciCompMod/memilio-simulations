@@ -151,7 +151,7 @@ mio::IOResult<void> set_contact_matrices(mio::osecir::Parameters<double>& params
 mio::IOResult<void> set_initial_compartments(mio::Graph<mio::osecir::Model<double>, mio::MobilityParameters<double>>& params_graph, const fs::path& data_dir)
 {
     // might be problematic if nodes in result are wrongly ordered
-    BOOST_OUTCOME_TRY(auto&& simulation_results, mio::read_result((data_dir / "results_run0.h5").string()));
+    BOOST_OUTCOME_TRY(auto&& simulation_results, mio::read_result(mio::path_join(mio::base_dir(), "../../../results_run0.h5")));
 
     for (size_t node_idx = 0; node_idx < params_graph.nodes().size(); ++node_idx) {
         auto& node = params_graph.nodes()[node_idx];
@@ -169,7 +169,7 @@ mio::IOResult<void> set_initial_compartments(mio::Graph<mio::osecir::Model<doubl
 mio::IOResult<void> set_sampled_parameters(mio::Graph<mio::osecir::Model<double>, mio::MobilityParameters<double>>& params_graph, const fs::path& data_dir, TestCase test_case)
 {
 
-    BOOST_OUTCOME_TRY(auto&& parameter_list, mio::read_json((data_dir / "samples.json").string()));
+    BOOST_OUTCOME_TRY(auto&& parameter_list, mio::read_json(mio::path_join(mio::base_dir(), "../../../samples.json")));
 
     for (size_t node_idx = 0; node_idx < params_graph.nodes().size(); ++node_idx) {
         auto& node = params_graph.nodes()[node_idx];
@@ -283,7 +283,7 @@ get_graph(mio::Date start_date, const int num_days, const fs::path& data_dir, Te
         mio::set_edges<double, ContactLocation, mio::osecir::Model<double>, mio::MobilityParameters<double>,
                        mio::MobilityCoefficientGroup<double>, mio::osecir::InfectionState, decltype(read_function_edges)>;
     
-    BOOST_OUTCOME_TRY(set_edge_function(mio::path_join(data_dir.string(), "Germany", "mobility", "commuter_mobility_2019.txt"), params_graph, mobile_compartments, 1,
+    BOOST_OUTCOME_TRY(set_edge_function(mio::path_join(data_dir.string(), "Germany", "mobility", "commuter_mobility_2022.txt"), params_graph, mobile_compartments, 1,
                                         read_function_edges, std::vector<double>{1}, std::vector<std::vector<size_t>>{}));
     
     mio::unused(end_date, test_case);
@@ -367,7 +367,7 @@ int main(int argc, char** argv)
     mio::set_log_level(mio::LogLevel::err);
     auto cli_parameters = mio::cli::ParameterSetBuilder()
                           .add<"DataDirectory">(mio::path_join(mio::base_dir(), "data/"))
-                          .add<"ResultDirectory">(mio::path_join(mio::base_dir(), "cpp/examples/simulation_paper/results"))
+                          .add<"ResultDirectory">(mio::path_join(mio::base_dir(), "../../../results"))
                           .add<"NumberSimulationDays">(60, {.alias = "n"})
                           .add<"RunMode">(RunMode::Save)
                           .add<"TestCase">(TestCase::Open)

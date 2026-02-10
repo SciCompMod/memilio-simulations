@@ -41,7 +41,7 @@
 
     For the parallel scaling, you can run the simulations with 
     ```bash
-    mpirun -n $num_mpi ./2026_Bicker_et_al_Memilio_paper/Fig6_b_and_f/build/bin/sim_ode_runtime -NumberEnsembleRuns $num_runs
+    mpirun -n $num_mpi ./2026_Bicker_et_al_Memilio_paper/Fig6_b_and_f/build/bin/sim_ode_ensemble_runs -NumberEnsembleRuns $num_runs
     ```
     and with 
     ```bash
