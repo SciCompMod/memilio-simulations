@@ -16,6 +16,7 @@ option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_d "Build simulations from fold
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig5 "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 5." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_a "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 6a." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_d "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 6d." OFF)
+option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_b "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 6b." OFF)
 
 # We require the library hdf5 for all targets.
 find_package(HDF5 REQUIRED)
@@ -89,7 +90,7 @@ if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_f_and_i)
   endif()
 
   execute_process(COMMAND cmake ".." WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_f_and_i/build")
-  execute_process(COMMAND cmake "--build" "."  "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_f_and_i/build")
+  execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_f_and_i/build")
 endif()
 
 if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig5)
@@ -118,7 +119,6 @@ if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_b)
   execute_process(COMMAND cmake ".." WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_b/build")
   execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_b/build")
 endif()
-
 
 if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_d)
   if(NOT EXISTS "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_d/build")
