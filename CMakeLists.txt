@@ -83,6 +83,15 @@ if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_d_and_e)
   execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_d_and_e/build")
 endif()
 
+if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_f_and_i)
+  if(NOT EXISTS "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_f_and_i/build")
+    execute_process(COMMAND mkdir "build/" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_f_and_i")
+  endif()
+
+  execute_process(COMMAND cmake ".." WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_f_and_i/build")
+  execute_process(COMMAND cmake "--build" "."  "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_f_and_i/build")
+endif()
+
 if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig5)
   if(NOT EXISTS "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig5/build")
     execute_process(COMMAND mkdir "build/" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig5")
@@ -100,6 +109,16 @@ if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_a)
   execute_process(COMMAND cmake ".." WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_a/build")
   execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_a/build")
 endif()
+
+if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_b)
+  if(NOT EXISTS "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_b/build")
+    execute_process(COMMAND mkdir "build/" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_b")
+  endif()
+
+  execute_process(COMMAND cmake ".." WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_b/build")
+  execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_b/build")
+endif()
+
 
 if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_d)
   if(NOT EXISTS "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_d/build")
