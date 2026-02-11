@@ -16,6 +16,7 @@ option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_b "Build simulations from fold
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_c "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 4c." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_d_and_e "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 4d, e." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_f_and_i "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 4f, i." OFF)
+option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_g_and_h "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 4g, h." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig5 "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 5." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_a "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 6a." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_b_and_f "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 6b, f." OFF)
@@ -114,6 +115,15 @@ if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_f_and_i)
 
   execute_process(COMMAND cmake ".." WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_f_and_i/build")
   execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_f_and_i/build")
+endif()
+
+if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_g_and_h)
+  if(NOT EXISTS "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_g_and_h/build")
+    execute_process(COMMAND mkdir "build/" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_g_and_h")
+  endif()
+
+  execute_process(COMMAND cmake ".." WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_g_and_h/build")
+  execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" "--target" "graph_germany_nuts3_optimal_control" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig4_g_and_h/build")
 endif()
 
 if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig5)
