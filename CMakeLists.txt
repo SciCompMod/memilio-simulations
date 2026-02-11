@@ -15,11 +15,13 @@ option(BUILD_2025_Kerkmann_Korf_et_al_Testing "Build simulations from folder ABM
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_b "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 4b." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_c "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 4c." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_d_and_e "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 4d, e." OFF)
+option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_f_and_i "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 4f, i." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig5 "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 5." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_a "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 6a." OFF)
-option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_d "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 6d." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_b_and_f "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 6b, f." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_c_and_f "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 6c, f." OFF)
+option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_d "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 6d." OFF)
+option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_e "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 6e." OFF)
 
 # We require the library hdf5 for all targets.
 find_package(HDF5 REQUIRED)
@@ -157,4 +159,13 @@ if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_d)
 
   execute_process(COMMAND cmake ".." WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_d/build")
   execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_d/build")
+endif()
+
+if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_e)
+  if(NOT EXISTS "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_e/build")
+    execute_process(COMMAND mkdir "build/" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_e")
+  endif()
+
+  execute_process(COMMAND cmake ".." WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_e/build")
+  execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_e/build")
 endif()
