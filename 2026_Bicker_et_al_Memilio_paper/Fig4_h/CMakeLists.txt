@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 
-project(memilio-simulations-2026_Bicker_et_al_Memilio_paper-Fig4_g_and_h VERSION 1.0.0)
+project(memilio-simulations-2026_Bicker_et_al_Memilio_paper-Fig4_h VERSION 1.0.0)
 
 # Executables should be stored in the build/bin/ folder.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
@@ -32,16 +32,14 @@ set(MEMILIO_BUILD_EXAMPLES OFF)
 set(MEMILIO_BUILD_SIMULATIONS OFF)
 set(MEMILIO_ENABLE_OPENMP OFF)
 set(MEMILIO_ENABLE_IPOPT ON)
-# set(MEMILIO_HAS_JSONCPP ON)
-# set(MEMILIO_HAS_HDF5 ON)
 
 # Add the subdirectory for MEmilio build.
 add_subdirectory(${memilio_SOURCE_DIR}/cpp ${memilio_BINARY_DIR})
 
-# if(MEMILIO_ENABLE_IPOPT AND MEMILIO_HAS_JSONCPP AND MEMILIO_HAS_HDF5)
+if(MEMILIO_ENABLE_IPOPT)
   add_executable(graph_germany_nuts3_optimal_control opt_scenario.cpp)
   target_link_libraries(graph_germany_nuts3_optimal_control PRIVATE memilio ode_secir Boost::filesystem AD::AD Ipopt::Ipopt ${HDF5_C_LIBRARIES})
-# endif()
+endif()
 
 add_custom_target(install_requirements_py ALL
   COMMAND bash ../install.sh

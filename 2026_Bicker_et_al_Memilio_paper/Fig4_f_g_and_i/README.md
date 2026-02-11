@@ -4,6 +4,8 @@
 
 - **MEmilio**: See `git_tag.cmake` for the required version.
 - **Python**: Required for the creation of the table.
+- **JsonCpp**: Required for the initialization.
+- **HDF5**: Required for the initialization.
 
 ## Files
 
@@ -20,7 +22,7 @@
 2. **Download the required data**:
     Download the data for Germany by running 
     ```bash
-    cd 2026_Bicker_et_al_Memilio_paper/Fig4_f_and_i
+    cd 2026_Bicker_et_al_Memilio_paper/Fig4_f_g_and_i
     source build/venv/bin/activate
     python build/_deps/memilio-src/pycode/memilio-epidata/memilio/epidata/getSimulationData.py -o "build/_deps/memilio-src/data"
     ```

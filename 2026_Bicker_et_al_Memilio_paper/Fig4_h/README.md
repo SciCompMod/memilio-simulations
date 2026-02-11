@@ -20,7 +20,7 @@
 2. **Download the required data**:
     Download the data for Germany by running 
     ```bash
-    cd 2026_Bicker_et_al_Memilio_paper/Fig4_g_and_h
+    cd 2026_Bicker_et_al_Memilio_paper/Fig4_h
     source build/venv/bin/activate
     python build/_deps/memilio-src/pycode/memilio-epidata/memilio/epidata/getSimulationData.py -o "build/_deps/memilio-src/data"
     ```

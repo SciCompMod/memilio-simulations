@@ -32,10 +32,12 @@ The following `<OPTION>`s can be set:
   - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_b`
   - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_c`
   - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_d_and_e`
-  - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_f_and_i`
+  - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_f_g_and_i`
+  - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_h`
   - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig5`
   - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_a`
   - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_b_and_f`
+  - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_c_and_f`
   - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_d`
   - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_e`
 
