@@ -1,0 +1,3580 @@
+diff --git a/cpp/benchmarks/CMakeLists.txt b/cpp/benchmarks/CMakeLists.txt
+index 731fe8d56..8c077355e 100755
+--- a/cpp/benchmarks/CMakeLists.txt
++++ b/cpp/benchmarks/CMakeLists.txt
+@@ -34,5 +34,5 @@ target_link_libraries(simulation_benchmark PRIVATE memilio ode_secir benchmark::
+ add_executable(graph_simulation_benchmark graph_simulation.cpp)
+ target_link_libraries(graph_simulation_benchmark PRIVATE memilio ode_secirvvs benchmark::benchmark)
+ 
+-add_executable(abm_benchmark abm.cpp)
+-target_link_libraries(abm_benchmark PRIVATE abm benchmark::benchmark)
++add_executable(abm_benchmark_scaling abm_benchmark_scaling.cpp)
++target_link_libraries(abm_benchmark_scaling PRIVATE abm benchmark::benchmark)
+\ No newline at end of file
+diff --git a/cpp/benchmarks/abm.cpp b/cpp/benchmarks/abm.cpp
+deleted file mode 100644
+index ed6037958..000000000
+--- a/cpp/benchmarks/abm.cpp
++++ /dev/null
+@@ -1,168 +0,0 @@
+-/* 
+-* Copyright (C) 2020-2025 MEmilio
+-*
+-* Authors: Daniel Abele
+-*
+-* Contact: Martin J. Kuehn <Martin.Kuehn@DLR.de>
+-*
+-* Licensed under the Apache License, Version 2.0 (the "License");
+-* you may not use this file except in compliance with the License.
+-* You may obtain a copy of the License at
+-*
+-*     http://www.apache.org/licenses/LICENSE-2.0
+-*
+-* Unless required by applicable law or agreed to in writing, software
+-* distributed under the License is distributed on an "AS IS" BASIS,
+-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-* See the License for the specific language governing permissions and
+-* limitations under the License.
+-*/
+-#include "abm/simulation.h"
+-
+-#include "benchmark/benchmark.h"
+-
+-mio::abm::Simulation<> make_simulation(size_t num_persons, std::initializer_list<uint32_t> seeds)
+-{
+-    auto rng = mio::RandomNumberGenerator();
+-    rng.seed(seeds);
+-    auto model      = mio::abm::Model(5);
+-    model.get_rng() = rng;
+-
+-    //create persons at home
+-    const auto mean_home_size    = 5.0;
+-    const auto min_home_size     = 1;
+-    auto& home_size_distribution = mio::PoissonDistribution<int>::get_instance();
+-    auto home                    = model.add_location(mio::abm::LocationType::Home);
+-    auto planned_home_size       = home_size_distribution(model.get_rng(), mean_home_size);
+-    auto home_size               = 0;
+-    for (size_t i = 0; i < num_persons; ++i) {
+-        if (home_size >= std::max(min_home_size, planned_home_size)) {
+-            home              = model.add_location(mio::abm::LocationType::Home);
+-            planned_home_size = home_size_distribution(model.get_rng(), mean_home_size);
+-            home_size         = 0;
+-        }
+-
+-        auto age    = mio::AgeGroup(mio::UniformIntDistribution<size_t>::get_instance()(
+-            model.get_rng(), size_t(0), model.parameters.get_num_groups() - 1));
+-        auto person = model.add_person(home, age);
+-        model.assign_location(uint32_t(i), home);
+-        home_size++;
+-    }
+-
+-    //create other locations
+-    for (auto loc_type :
+-         {mio::abm::LocationType::School, mio::abm::LocationType::Work, mio::abm::LocationType::SocialEvent,
+-          mio::abm::LocationType::BasicsShop, mio::abm::LocationType::Hospital, mio::abm::LocationType::ICU}) {
+-
+-        const auto num_locs = std::max(size_t(1), num_persons / 2'000);
+-        std::vector<mio::abm::LocationId> locs(num_locs);
+-        std::generate(locs.begin(), locs.end(), [&] {
+-            return model.add_location(loc_type);
+-        });
+-        for (size_t p = 0; p < num_persons; ++p) {
+-            auto loc_idx =
+-                mio::UniformIntDistribution<size_t>::get_instance()(model.get_rng(), size_t(0), num_locs - 1);
+-            model.assign_location(uint32_t(p), locs[loc_idx]);
+-        }
+-    }
+-
+-    //infections and masks
+-    for (auto& person : model.get_persons()) {
+-        auto prng = mio::abm::PersonalRandomNumberGenerator(person);
+-        //some % of people are infected, large enough to have some infection activity without everyone dying
+-        auto pct_infected = 0.05;
+-        if (mio::UniformDistribution<ScalarType>::get_instance()(prng, 0.0, 1.0) < pct_infected) {
+-            auto state = mio::abm::InfectionState(
+-                mio::UniformIntDistribution<int>::get_instance()(prng, 1, int(mio::abm::InfectionState::Count) - 1));
+-            auto infection = mio::abm::Infection(prng, mio::abm::VirusVariant::Wildtype, person.get_age(),
+-                                                 model.parameters, mio::abm::TimePoint(0), state);
+-            person.add_new_infection(std::move(infection));
+-        }
+-
+-        //equal chance of (moderate) mask refusal and (moderate) mask eagerness
+-        auto pct_compliance_values = std::array{0.05 /*0*/, 0.2 /*0.25*/, 0.5 /*0.5*/, 0.2 /*0.75*/, 0.05 /*1*/};
+-        auto compliance_value      = 0.25 * mio::DiscreteDistribution<int>::get_instance()(prng, pct_compliance_values);
+-        person.set_compliance(mio::abm::InterventionType::Mask, compliance_value);
+-    }
+-
+-    //masks at locations
+-    for (auto& loc : model.get_locations()) {
+-        //some % of locations require masks
+-        //skip homes so persons always have a place to go, simulation might break otherwise
+-        auto pct_require_mask = 0.2;
+-        if (loc.get_type() != mio::abm::LocationType::Home &&
+-            mio::UniformDistribution<ScalarType>::get_instance()(model.get_rng()) < pct_require_mask) {
+-            loc.set_required_mask(mio::abm::MaskType::Community);
+-        }
+-    }
+-
+-    //testing schemes
+-    auto sample = [&](auto v, size_t n) { //selects n elements from list v
+-        std::shuffle(v.begin(), v.end(), model.get_rng());
+-        return std::vector<typename decltype(v)::value_type>(v.begin(), v.begin() + n);
+-    };
+-    std::vector<mio::AgeGroup> ages;
+-    std::generate_n(std::back_inserter(ages), model.parameters.get_num_groups(), [a = 0]() mutable {
+-        return mio::AgeGroup(a++);
+-    });
+-    auto random_criteria = [&]() {
+-        auto random_ages   = sample(ages, 2);
+-        auto random_states = std::vector<mio::abm::InfectionState>(0);
+-        return mio::abm::TestingCriteria(random_ages, random_states);
+-    };
+-
+-    model.get_testing_strategy().add_scheme(
+-        {mio::abm::LocationType::School, mio::abm::LocationType::Work, mio::abm::LocationType::SocialEvent,
+-         mio::abm::LocationType::Home},
+-        mio::abm::TestingScheme(random_criteria(), mio::abm::days(3), mio::abm::TimePoint(0),
+-                                mio::abm::TimePoint(0) + mio::abm::days(10), {}, 0.5));
+-
+-    return mio::abm::Simulation(mio::abm::TimePoint(0), std::move(model));
+-}
+-
+-/**
+- * Benchmark for the ABM simulation.
+- * @param num_persons Number of persons in the simulation.
+- * @param seeds Seeds for the random number generator.
+- */
+-void abm_benchmark(benchmark::State& state, size_t num_persons, std::initializer_list<uint32_t> seeds)
+-{
+-    mio::set_log_level(mio::LogLevel::warn);
+-
+-    for (auto&& _ : state) {
+-        state.PauseTiming(); //exclude the setup from the benchmark
+-        auto sim = make_simulation(num_persons, seeds);
+-        state.ResumeTiming();
+-
+-        //simulated time should be long enough to have full infection runs and mobility to every location
+-        auto final_time = sim.get_time() + mio::abm::days(10);
+-        sim.advance(final_time);
+-
+-        //debug output can be enabled to check for unexpected results (e.g. infections dieing out)
+-        //normally should have no significant effect on runtime
+-        const bool monitor_infection_activity = false;
+-        if constexpr (monitor_infection_activity) {
+-            std::cout << "num_persons = " << num_persons << "\n";
+-            for (auto inf_state = 0; inf_state < (int)mio::abm::InfectionState::Count; inf_state++) {
+-                std::cout << "inf_state = " << inf_state << ", sum = "
+-                          << sim.get_model().get_subpopulation_combined(sim.get_time(),
+-                                                                        mio::abm::InfectionState(inf_state))
+-                          << "\n";
+-            }
+-        }
+-    }
+-}
+-
+-//Measure ABM simulation run time with different sizes and different seeds.
+-//Fixed RNG seeds to make runs comparable. When there are code changes, the simulation will still
+-//run differently due to different sequence of random numbers being drawn. But for large enough sizes
+-//RNG should average out, so runs should be comparable even with code changes.
+-//We run a few different benchmarks to hopefully catch abnormal cases. Then seeds may
+-//have to be adjusted to get the benchmark back to normal.
+-//For small sizes (e.g. 10k) extreme cases are too likely, i.e. infections die out
+-//or overwhelm everything, so we don't benchmark these. Results should be mostly transferrable.
+-BENCHMARK_CAPTURE(abm_benchmark, abm_benchmark_50k, 50000, {14159265u, 35897932u})->Unit(benchmark::kMillisecond);
+-BENCHMARK_CAPTURE(abm_benchmark, abm_benchmark_100k, 100000, {38462643u, 38327950u})->Unit(benchmark::kMillisecond);
+-BENCHMARK_CAPTURE(abm_benchmark, abm_benchmark_200k, 200000, {28841971u, 69399375u})->Unit(benchmark::kMillisecond);
+-
+-BENCHMARK_MAIN();
+diff --git a/cpp/benchmarks/abm_benchmark_scaling.cpp b/cpp/benchmarks/abm_benchmark_scaling.cpp
+new file mode 100644
+index 000000000..14c3394a9
+--- /dev/null
++++ b/cpp/benchmarks/abm_benchmark_scaling.cpp
+@@ -0,0 +1,143 @@
++/* 
++* Copyright (C) 2020-2025 MEmilio
++*
++* Authors: Daniel Abele
++*
++* Contact: Martin J. Kuehn <Martin.Kuehn@DLR.de>
++*
++* Licensed under the Apache License, Version 2.0 (the "License");
++* you may not use this file except in compliance with the License.
++* You may obtain a copy of the License at
++*
++*     http://www.apache.org/licenses/LICENSE-2.0
++*
++* Unless required by applicable law or agreed to in writing, software
++* distributed under the License is distributed on an "AS IS" BASIS,
++* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++* See the License for the specific language governing permissions and
++* limitations under the License.
++*/
++#include "abm/simulation.h"
++#include "abm/common_abm_loggers.h"
++#include "benchmark/benchmark.h"
++#include "abm/city_builder.h"
++
++mio::abm::Simulation<> make_simulation(size_t num_persons, std::initializer_list<uint32_t> seeds)
++{
++    auto rng = mio::RandomNumberGenerator();
++    rng.seed(seeds);
++
++    auto model = CityBuilder::build_world(CityConfig{static_cast<int>(num_persons)}, rng);
++
++    //infections and masks
++    for (auto& person : model.get_persons()) {
++        auto prng = mio::abm::PersonalRandomNumberGenerator(person);
++        //some % of people are infected, large enough to have some infection activity without everyone dying
++        auto pct_infected = 0.0005;
++        if (mio::UniformDistribution<ScalarType>::get_instance()(prng, 0.0, 1.0) < pct_infected) {
++            auto infection =
++                mio::abm::Infection(prng, mio::abm::VirusVariant::Wildtype, person.get_age(), model.parameters,
++                                    mio::abm::TimePoint(0), mio::abm::InfectionState::Exposed);
++            person.add_new_infection(std::move(infection));
++        }
++    }
++
++    return mio::abm::Simulation(mio::abm::TimePoint(0), std::move(model));
++}
++
++/**
++ * Benchmark for the ABM simulation.
++ * @param num_persons Number of persons in the simulation.
++ * @param seeds Seeds for the random number generator.
++ */
++void abm_benchmark(benchmark::State& state, size_t num_persons, std::initializer_list<uint32_t> seeds)
++{
++    mio::set_log_level(mio::LogLevel::warn);
++
++    for (auto&& _ : state) {
++        state.PauseTiming(); //exclude the setup from the benchmark
++        auto sim = make_simulation(num_persons, seeds);
++        state.ResumeTiming();
++
++        //simulated time should be long enough to have full infection runs and mobility to every location
++        auto final_time = sim.get_time() + mio::abm::days(5);
++        mio::History<mio::DataWriterToMemory, mio::abm::LogDataForMobility> history;
++        sim.advance(final_time);
++
++        //debug output can be enabled to check for unexpected results (e.g. infections dieing out)
++        //normally should have no significant effect on runtime
++        const bool monitor_infection_activity = false;
++        if constexpr (monitor_infection_activity) {
++            std::cout << "num_persons = " << num_persons << "\n";
++            for (auto inf_state = 0; inf_state < (int)mio::abm::InfectionState::Count; inf_state++) {
++                std::cout << "inf_state = " << inf_state << ", sum = "
++                          << sim.get_model().get_subpopulation_combined(sim.get_time(),
++                                                                        mio::abm::InfectionState(inf_state))
++                          << "\n";
++            }
++        }
++    }
++}
++
++//Measure ABM simulation run time with different sizes and different seeds.
++//Fixed RNG seeds to make runs comparable. When there are code changes, the simulation will still
++//run differently due to different sequence of random numbers being drawn. But for large enough sizes
++//RNG should average out, so runs should be comparable even with code changes.
++//We run a few different benchmarks to hopefully catch abnormal cases. Then seeds may
++//have to be adjusted to get the benchmark back to normal.
++//For small sizes (e.g. 10k) extreme cases are too likely, i.e. infections die out
++//or overwhelm everything, so we don't benchmark these. Results should be mostly transferrable.
++
++int main(int argc, char** argv)
++{
++    // Default problem size
++    size_t num_persons = 1000;
++
++    //print omp_threads
++#ifdef MEMILIO_ENABLE_OPENMP
++    int omp_threads = 1;
++#pragma omp parallel
++    {
++#pragma omp single
++        omp_threads = omp_get_num_threads();
++    }
++    std::cout << "Running ABM benchmark with " << omp_threads << " OpenMP threads.\n";
++#else
++    std::cout << "Running ABM benchmark without OpenMP.\n";
++#endif
++
++    // Parse custom arguments for problem size BEFORE benchmark::Initialize
++    // Remove custom args from argv to prevent benchmark from seeing them
++    std::vector<char*> filtered_argv;
++    filtered_argv.push_back(argv[0]); // Keep program name
++
++    for (int i = 1; i < argc; ++i) {
++        std::string arg = argv[i];
++        if (arg.find("--num_persons=") == 0) {
++            num_persons = std::stoul(arg.substr(14));
++            // Don't add this to filtered_argv
++        }
++        else {
++            // Keep other arguments for benchmark
++            filtered_argv.push_back(argv[i]);
++        }
++    }
++
++    // Update argc to reflect filtered arguments
++    int filtered_argc = static_cast<int>(filtered_argv.size());
++
++    // Register the benchmark with the specified problem size
++    std::string benchmark_name = "abm_benchmark_" + std::to_string(num_persons);
++    benchmark::RegisterBenchmark(benchmark_name.c_str(), [num_persons](benchmark::State& state) {
++        abm_benchmark(state, num_persons, {1415921265u, 35897932u});
++    })->Unit(benchmark::kMillisecond);
++
++    // Initialize and run benchmarks with filtered arguments
++    benchmark::Initialize(&filtered_argc, filtered_argv.data());
++    if (benchmark::ReportUnrecognizedArguments(filtered_argc, filtered_argv.data())) {
++        return 1;
++    }
++    benchmark::RunSpecifiedBenchmarks();
++    benchmark::Shutdown();
++    return 0;
++}
+\ No newline at end of file
+diff --git a/cpp/benchmarks/benchmark_results.py b/cpp/benchmarks/benchmark_results.py
+new file mode 100644
+index 000000000..005a31f5d
+--- /dev/null
++++ b/cpp/benchmarks/benchmark_results.py
+@@ -0,0 +1,721 @@
++import numpy as np
++import matplotlib.pyplot as plt
++from matplotlib.ticker import ScalarFormatter, LogLocator, FuncFormatter
++import json
++import argparse
++from pathlib import Path
++from scipy import stats
++import os
++
++# Optional imports for enhanced functionality
++try:
++    import seaborn as sns
++    sns.set_palette("husl")
++    HAS_SEABORN = True
++except ImportError:
++    HAS_SEABORN = False
++
++try:
++    import pandas as pd
++    HAS_PANDAS = True
++except ImportError:
++    HAS_PANDAS = False
++
++# Set professional plot style
++plt.style.use('default')
++plt.rcParams['grid.alpha'] = 0.3
++plt.rcParams['figure.facecolor'] = 'white'
++
++# DPI for high-quality output
++DPI = 300
++
++# Base fontsize settings
++BASE_FONTSIZE = 17
++TICK_FONTSIZE = int(0.8 * BASE_FONTSIZE)
++LEGEND_FONTSIZE = int(0.8 * BASE_FONTSIZE)
++
++
++def set_fontsize(base_fontsize=17):
++    """Set font sizes for all plot elements."""
++    fontsize = base_fontsize
++    plt.rcParams.update({
++        'font.size': fontsize,
++        'axes.titlesize': fontsize * 1,
++        'axes.labelsize': fontsize ,
++        'xtick.labelsize': fontsize * 0.8,
++        'ytick.labelsize': fontsize * 0.8,
++        'legend.fontsize': fontsize * 0.8,
++        'font.family': "Arial"
++    })
++
++
++class rawData:
++    """Class to hold raw benchmark data."""
++
++    def __init__(self):
++        # Population sizes in thousands
++        self.population_sizes = [1000, 2000, 4000,
++                                 8000, 16000, 32000, 64000, 128000, 256000]  # in thousands
++        self.population_sizes = [p * 1000 for p in self.population_sizes]
++
++        # Runtime memilio single thread (normalized per time step)
++        self.memilio_times_single_core = np.array(
++            [31023, 62863, 124198, 248658, 498499, 1003958, 1992911, 6342611, 15568413]) * (1/120.0) * (1/1000)
++
++        # Runtime memilio four threads (normalized per time step)
++        self.memilio_times_four_cores = np.array(
++            [14744, 30224, 60749, 119645, 240825, 496879, 1031504, 2561311, 5752128]) * (1/120.0)*(1/1000)
++
++        self.memilio_times_sixteen_cores = np.array(
++            [11818, 23459, 47549, 94222, 187279, 378181, 776280, 1656997, 3477961]) * (1/120.0)*(1/1000)
++
++        # covasim single thread (normalized per time step)
++        self.covasim = np.array(
++            [37809, 75152, 198949, 409061, 863334, 1762960, 3618340]) * (1/120.0)*(1/1000)
++
++        # opencovid single thread (normalized per time step) (in seconds!!!!)
++        self.opencovid = np.array(
++            [380, 622, 1069, 2009, 3947, 8569, 16142]) * (1/120.0)
++
++        # now data for weak scaling
++        self.weak_scaling_cores = [1, 2, 4, 8, 16, 32]
++
++        # Runtime with 250.000 agents per core
++        self.memilio_weak_scaling_250k = np.array(
++            [7625, 10058, 14891, 25895, 46850, 124340]) * (1/120.0)*(1/1000)
++
++        # Runtime with 500.000 agents per core
++        self.memilio_weak_scaling_500k = np.array(
++            [15343, 20838, 30058, 52553, 93834, 237016]) * (1/120.0)*(1/1000)
++
++        # Runtime with 1.000.000 agents per core
++        self.memilio_weak_scaling_1m = np.array(
++            [31135, 41238, 60003, 103803, 188685, 483887]) * (1/120.0)*(1/1000)
++
++        # Runtime with 2.000.000 agents per core
++        self.memilio_weak_scaling_2m = np.array(
++            [61156, 82754, 119354, 208809, 377700, 891970]) * (1/120.0)*(1/1000)
++
++        # now data for strong scaling
++
++        self.strong_scaling_cores = [1, 2, 4, 8, 16, 32, 64, 128]
++        self.strong_scaling_nodes = [1, 2, 4, 8, 16, 32, 64, 128]
++        # multiply each by 128 for total cores
++        self.strong_scaling_nodes = [
++            n * 128 for n in self.strong_scaling_nodes]
++
++        # Runtime Strong scaling
++        self.memilio_strong_scaling_128_runs_one_node = np.array(
++            [2.512869e+04, 1.911620e+04,  9.766570e+03, 4.919744e+03,  2.492793e+03, 1.299748e+03,  8.281876e+02,  5.801488e+02])
++        self.memilio_strong_scaling_128_runs_multiple_nodes = np.array(
++            # only last data point available
++            [7.413365e+04, 3.721441e+04, 1.865978e+04, 9.374108e+03, 4.684981e+03, 2.357355e+03, 1.187477e+03, 6.005680e+02])
++        
++
++        # "Graph-ODE w/ mobility: [19566.8, 9718.44, 4847.9, 2417.92, 1252.95, 615.575, 329.08, 190.454],
++        # "LCT": [746.859, 373.144, 185.975, 92.8182, 46.6567, 24.8617, 12.8418, 7.05302],
++        # "IDE": [5358.52, 2672.95, 1341, 666.594, 332.608, 176.283, 91.0512, 46.2337]
++        self.memilio_graph_ode_strong_scaling_128_runs_one_node = np.array(
++            [19566.8, 9718.44, 4847.9, 2417.92, 1252.95, 615.575, 329.08, 190.454])
++        self.memilio_lct_strong_scaling_128_runs_one_node = np.array(
++            [746.859, 373.144, 185.975, 92.8182, 46.6567, 24.8617, 12.8418, 7.05302])
++        self.memilio_ide_strong_scaling_128_runs_one_node = np.array(
++            [5358.52, 2672.95, 1341, 666.594, 332.608, 176.283, 91.0512, 46.2337])
++        
++
++
++class BenchmarkAnalyzer:
++    """Enhanced benchmark analysis and visualization tool."""
++
++    def __init__(self, fontsize=None):
++        self.fontsize = fontsize if fontsize is not None else BASE_FONTSIZE
++        self.colors = {'memilio': '#1f77b4', 'covasim': '#ff7f0e'}
++
++    def load_data_from_file(self, filename):
++        """Load benchmark data from JSON file."""
++        if Path(filename).exists():
++            with open(filename, 'r') as f:
++                data = json.load(f)
++                self.population_sizes = data.get(
++                    'population_sizes', self.population_sizes)
++                self.memilio_times = np.array(
++                    data.get('memilio_times', self.memilio_times))
++                self.covasim_times = np.array(
++                    data.get('covasim_times', self.covasim_times))
++                print(f"Loaded data from {filename}")
++        else:
++            print(f"File {filename} not found, using default data")
++
++    def save_data_to_file(self, filename):
++        """Save current benchmark data to JSON file."""
++        data = {
++            'population_sizes': self.population_sizes,
++            'memilio_times': self.memilio_times.tolist(),
++            'covasim_times': self.covasim_times.tolist()
++        }
++        with open(filename, 'w') as f:
++            json.dump(data, f, indent=2)
++        print(f"Data saved to {filename}")
++
++    def calculate_metrics(self):
++        """Calculate performance metrics."""
++        # Time per 1000 agents
++        memilio_per_1k = [1000 * t / p for t,
++                          p in zip(self.memilio_times, self.population_sizes)]
++        covasim_per_1k = [1000 * t / p for t,
++                          p in zip(self.covasim_times, self.population_sizes)]
++
++        # Speedup factor (Covasim time / MEmilio time)
++        speedup = self.covasim_times / self.memilio_times
++
++        # Scaling exponents (fit power law: time = a * pop_size^b)
++        log_pop = np.log10(self.population_sizes)
++        memilio_slope, memilio_intercept, memilio_r, _, _ = stats.linregress(
++            log_pop, np.log10(self.memilio_times))
++        covasim_slope, covasim_intercept, covasim_r, _, _ = stats.linregress(
++            log_pop, np.log10(self.covasim_times))
++
++        return {
++            'memilio_per_1k': memilio_per_1k,
++            'covasim_per_1k': covasim_per_1k,
++            'speedup': speedup,
++            'memilio_scaling': {'exponent': memilio_slope, 'r_squared': memilio_r**2},
++            'covasim_scaling': {'exponent': covasim_slope, 'r_squared': covasim_r**2}
++        }
++
++    def _annotate_speedups_minmax(self, ax, x_data, y_data_fast, y_data_slow, color, fontsize=None):
++        """Draw triangle markers and speedup labels for min and max speedup only."""
++        if fontsize is None:
++            fontsize = max(int(TICK_FONTSIZE * 0.85), 6)
++
++        try:
++            import matplotlib.patheffects as mpatheffects
++        except Exception:
++            mpatheffects = None
++
++        # Get axis limits for label positioning
++        try:
++            x_limits = ax.get_xlim()
++            is_log_x = ax.get_xscale() == 'log'
++        except Exception:
++            x_limits = None
++            is_log_x = False
++
++        def _shift_label_x(x_value):
++            if x_limits is None:
++                return x_value
++            xmin, xmax = x_limits
++            if not (np.isfinite(xmin) and np.isfinite(xmax)):
++                return x_value
++            if is_log_x and x_value > 0:
++                candidate = x_value * 1.4  # Moderate shift to the right
++                max_allowed = xmax / 1.01 if xmax > 0 else xmax
++                if x_value >= max_allowed:
++                    return x_value
++                return candidate if candidate < max_allowed else max_allowed
++            span = xmax - xmin
++            if span <= 0:
++                return x_value
++            # Moderate shift to the right
++            candidate = x_value + 0.10 * span
++            max_allowed = xmax - 0.01 * span
++            if x_value >= max_allowed:
++                return x_value
++            return candidate if candidate < max_allowed else max_allowed
++
++        # First pass: calculate all speedups to find min and max
++        min_len = min(len(x_data), len(y_data_fast), len(y_data_slow))
++        speedups = []
++        valid_indices = []
++
++        for i in range(min_len):
++            y_fast = y_data_fast[i]
++            y_slow = y_data_slow[i]
++
++            if np.isfinite(y_fast) and np.isfinite(y_slow) and y_fast > 0 and y_slow > 0:
++                speedup = y_slow / y_fast
++                if np.isfinite(speedup):
++                    speedups.append(speedup)
++                    valid_indices.append(i)
++
++        if not speedups:
++            return
++
++        # Find indices of min and max speedup
++        min_speedup_idx = valid_indices[np.argmin(speedups)]
++        max_speedup_idx = valid_indices[np.argmax(speedups)]
++
++        # Draw annotations only for min and max
++        for i in [min_speedup_idx, max_speedup_idx]:
++            x = x_data[i]
++            y_fast = y_data_fast[i]
++            y_slow = y_data_slow[i]
++
++            lower, upper = (y_fast, y_slow) if y_fast < y_slow else (
++                y_slow, y_fast)
++
++            # Draw triangle markers along the vertical line
++            n_points = 12
++            y_points = np.logspace(np.log10(lower), np.log10(upper), n_points)
++            x_points = np.full(n_points, x)
++
++            ax.plot(
++                x_points,
++                y_points,
++                color=color,
++                linewidth=0,
++                linestyle='None',
++                marker='^',
++                markersize=4,
++                markerfacecolor=color,
++                markeredgecolor=color,
++                alpha=0.45,
++                zorder=1.5,
++            )
++
++            # Calculate and display speedup
++            speedup = y_slow / y_fast
++
++            y_mid = np.sqrt(y_fast * y_slow)
++            # Position slightly above center
++            shift_factor = 1.4
++            offset_upper = upper * 0.99
++            offset_lower = lower * 1.02
++            if y_fast < y_slow:
++                # Position slightly above center
++                y_pos = min(y_mid * shift_factor, offset_upper)
++            else:
++                y_pos = max(y_mid * shift_factor, offset_lower)
++
++            label = f"{speedup:.0f}×"
++            # Increase fontsize - was using TICK_FONTSIZE * 0.85, now use BASE_FONTSIZE * 0.9
++            label_fontsize = int(BASE_FONTSIZE * 0.9)
++            text_obj = ax.text(
++                _shift_label_x(x),
++                y_pos,
++                label,
++                ha="center",
++                va="center",
++                color=color,
++                fontsize=label_fontsize,
++                zorder=4,
++                clip_on=False,
++            )
++            if mpatheffects is not None:
++                text_obj.set_path_effects(
++                    [mpatheffects.withStroke(linewidth=2.0, foreground="white")])
++
++    def plot_agent_scaling(self, raw_data, save_path=None):
++        """Plot 1: Scaling with agents - memilio (1, 4, 16 cores), covasim, and opencovid."""
++        set_fontsize()
++        figsize = (8, 5)
++        panel = (0.2, 0.2, 0.78, 0.75)
++        fig = plt.figure(figsize=figsize, dpi=DPI)
++        ax = fig.add_axes(panel)
++
++        # Define colors for memilio lines (shades of blue)
++        memilio_color_1 = '#741194'   # dark blue
++        memilio_color_4 = '#741194'   # medium blue
++        memilio_color_16 = '#741194'  # light blue
++        covasim_color = '#5D8A2B'      # orange
++        opencovid_color = '#E89A63'    # green
++
++        # Plot MEmilio with different core counts (all same color family)
++        ax.plot(raw_data.population_sizes, raw_data.memilio_times_single_core,
++                marker='o',  
++                color=memilio_color_1, label='MEmilio ABM (1 core)', linestyle='-')
++
++        ax.plot(raw_data.population_sizes, raw_data.memilio_times_four_cores,
++                marker='o',  
++                color=memilio_color_4, label='MEmilio ABM (4 cores)', linestyle='--')
++        ax.plot(raw_data.population_sizes, raw_data.memilio_times_sixteen_cores,
++                marker='o',  
++                color=memilio_color_16, label='MEmilio ABM (16 cores)', linestyle='dotted')
++
++        # Plot Covasim (fewer data points)
++        covasim_pop_sizes = raw_data.population_sizes[:len(raw_data.covasim)]
++        ax.plot(covasim_pop_sizes, raw_data.covasim,
++                marker='o',  
++                color=covasim_color, label='Covasim', linestyle='-')
++
++        # Plot OpenCOVID (fewer data points)
++        opencovid_pop_sizes = raw_data.population_sizes[:len(
++            raw_data.opencovid)]
++        ax.plot(opencovid_pop_sizes, raw_data.opencovid,
++                marker='o',  
++                color=opencovid_color, label='OpenCOVID', linestyle='-')
++
++        ax.set_xscale('log')
++        ax.set_yscale('log')
++        ax.set_xlabel('Agents [#]')
++        ax.set_ylabel('Runtime [s]')
++
++        ax.grid(True, alpha=0.3)
++        ax.legend(fontsize=LEGEND_FONTSIZE, loc='lower right',
++                  framealpha=0.95, edgecolor='gray', fancybox=False)
++
++        # Add speedup annotations between different implementations (min and max only)
++        # MEmilio 16 cores vs Covasim (use covasim color)
++        self._annotate_speedups_minmax(ax, covasim_pop_sizes,
++                                       raw_data.memilio_times_sixteen_cores[:len(
++                                           raw_data.covasim)],
++                                       raw_data.covasim, covasim_color)
++
++        # MEmilio 16 cores vs OpenCOVID (use opencovid color)
++        self._annotate_speedups_minmax(ax, opencovid_pop_sizes,
++                                       raw_data.memilio_times_sixteen_cores[:len(
++                                           raw_data.opencovid)],
++                                       raw_data.opencovid, opencovid_color)
++
++        if save_path:
++            fig.savefig(save_path, dpi=DPI)
++            # Also save PDF version
++            pdf_path = str(save_path).replace('.png', '.pdf')
++            fig.savefig(pdf_path, dpi=DPI)
++            print(
++                f"Agent scaling plots saved to:\n  {save_path}\n  {pdf_path}")
++
++        return fig, ax
++
++    def plot_one_node_strong_scaling(self, raw_data, save_path=None):
++        """Plot 3: One node strong scaling."""
++        set_fontsize()
++        figsize = (8, 5)
++        panel = (0.2, 0.2, 0.78, 0.75)
++        fig = plt.figure(figsize=figsize, dpi=DPI)
++        ax = fig.add_axes(panel)
++
++        # Set tick label sizes
++        ax.tick_params(axis='both', which='both', labelsize=TICK_FONTSIZE)
++
++        # Use only the data points that exist (skip the first element which is 1)
++        cores = raw_data.strong_scaling_cores[0:len(
++            raw_data.memilio_strong_scaling_128_runs_one_node)]
++        runtimes = raw_data.memilio_strong_scaling_128_runs_one_node[0:]
++        runtimes_graph_ode = raw_data.memilio_graph_ode_strong_scaling_128_runs_one_node[0:]
++        runtimes_lct = raw_data.memilio_lct_strong_scaling_128_runs_one_node[0:]
++        runtimes_ide = raw_data.memilio_ide_strong_scaling_128_runs_one_node[0:]
++
++        # Plot runtime
++        ax.plot(cores, runtimes,
++                marker='o',  
++                color='#741194', label='ABM', linestyle='-')
++        ax.plot(cores, runtimes_graph_ode,
++                marker='o',  
++                color="#0D47A1", label='Graph-ODE\nw/ mobility', linestyle='-')
++        ax.plot(cores, runtimes_lct,
++                marker='o',  
++                color='#5D8A2B', label='LCT', linestyle='-')
++        ax.plot(cores, runtimes_ide,
++                marker='o',  
++                color='#E89A63', label='IDE', linestyle='-')
++        
++
++        # Calculate and plot ideal scaling
++        if len(runtimes) > 0:
++            ideal_scaling = [((runtimes[1] / c * cores[1])*0.26)for c in cores]
++            ax.plot(cores, ideal_scaling,
++                    'k--', linewidth=2, alpha=0.5, label='Ideal scaling')
++
++        ax.set_xlabel('Cores [#]')
++        ax.set_ylabel('Runtime [s]')
++
++        ax.grid(True, alpha=0.3)
++        ax.legend(fontsize=LEGEND_FONTSIZE,
++                  framealpha=0.95, edgecolor='gray', fancybox=False)
++
++        # Set x-axis to log scale if useful, or linear
++        ax.set_xscale('log', base=2)
++        ax.set_yscale('log')
++        ax.set_xticks(cores)
++        ax.set_xticklabels([str(c) for c in cores])
++
++        if save_path:
++            fig.savefig(save_path, dpi=DPI)
++            pdf_path = str(save_path).replace('.png', '.pdf')
++            fig.savefig(pdf_path, dpi=DPI)
++            print(
++                f"One node strong scaling plots saved to:\n  {save_path}\n  {pdf_path}")
++
++        return fig, ax
++
++    def plot_multi_node_strong_scaling(self, raw_data, save_path=None):
++        """Plot 4: Multi-node strong scaling."""
++        set_fontsize()
++        figsize = (8, 5)
++        panel = (0.2, 0.2, 0.78, 0.75)
++        fig = plt.figure(figsize=figsize, dpi=DPI)
++        ax = fig.add_axes(panel)
++
++        # Set tick label sizes
++        ax.tick_params(axis='both', which='both', labelsize=TICK_FONTSIZE)
++
++        # Use only the data points that exist (skip the first element which is 1)
++        nodes = raw_data.strong_scaling_nodes[0:len(
++            raw_data.memilio_strong_scaling_128_runs_multiple_nodes)]
++        runtimes = raw_data.memilio_strong_scaling_128_runs_multiple_nodes[0:]
++
++        # Plot runtime
++        ax.plot(nodes, runtimes,
++                marker='o',  
++                color='#741194', label='ABM', linestyle='-')
++
++        # Calculate and plot ideal scaling
++        if len(runtimes) > 0:
++            ideal_scaling = [runtimes[1] / n * nodes[1] for n in nodes]
++            ax.plot(nodes, ideal_scaling,
++                    'k--', linewidth=2, alpha=0.5, label='Ideal scaling')
++
++        ax.set_xlabel('Cores [#]')
++        ax.set_ylabel('Runtime [s]')
++
++        ax.grid(True, alpha=0.3)
++        ax.legend(fontsize=LEGEND_FONTSIZE,
++                  framealpha=0.95, edgecolor='gray', fancybox=False)
++
++        # Set x-axis to log scale if useful, or linear
++        ax.set_xscale('log', base=2)
++        ax.set_yscale('log')
++        ax.set_xticks(nodes)
++        ax.set_xticklabels([str(n) for n in nodes])
++
++        if save_path:
++            fig.savefig(save_path, dpi=DPI)
++            pdf_path = str(save_path).replace('.png', '.pdf')
++            fig.savefig(pdf_path, dpi=DPI)
++            print(
++                f"Multi-node strong scaling plots saved to:\n  {save_path}\n  {pdf_path}")
++
++        return fig, ax
++
++    def plot_weak_scaling(self, raw_data, save_path=None):
++        """Plot 2: Weak scaling plot for different agent counts per core."""
++        set_fontsize()
++        figsize = (8, 5)
++        panel = (0.2, 0.2, 0.78, 0.75)
++        fig = plt.figure(figsize=figsize, dpi=DPI)
++        ax = fig.add_axes(panel)
++
++        # Number of cores for weak scaling
++        num_cores = [1, 2, 4, 8, 16, 32]
++
++        # Plot each configuration
++        ax.plot(num_cores, raw_data.memilio_weak_scaling_250k,
++                marker='o',  
++                label='250k agents per core', linestyle='-')
++
++        ax.plot(num_cores, raw_data.memilio_weak_scaling_500k,
++                marker='s',  
++                label='500k agents per core', linestyle='-')
++
++        ax.plot(num_cores, raw_data.memilio_weak_scaling_1m,
++                marker='^',  
++                label='1M agents per core', linestyle='-')
++
++        ax.plot(num_cores, raw_data.memilio_weak_scaling_2m,
++                marker='D',  
++                label='2M agents per core', linestyle='-')
++
++        # Add ideal scaling line (constant runtime)
++        # ideal_runtime = raw_data.memilio_weak_scaling_250k[0]
++        # ax.plot(num_cores, [ideal_runtime] * len(num_cores),
++        #         'k--', linewidth=2, alpha=0.5, label='Ideal (constant runtime)')
++
++        ax.set_xlabel('Cores [#]')
++        ax.set_ylabel('Runtime [s]')
++
++        ax.grid(True, alpha=0.3)
++        ax.legend(fontsize=LEGEND_FONTSIZE,
++                  framealpha=0.95, edgecolor='gray', fancybox=False)
++
++        # Set x-axis ticks to actual core counts
++        ax.set_xticks(num_cores)
++        ax.set_xticklabels([str(c) for c in num_cores])
++
++        ax.set_yscale('log')
++
++        if save_path:
++            fig.savefig(save_path, dpi=DPI)
++            pdf_path = str(save_path).replace('.png', '.pdf')
++            fig.savefig(pdf_path, dpi=DPI)
++            print(f"Weak scaling plots saved to:\n  {save_path}\n  {pdf_path}")
++
++        return fig, ax
++
++    def print_summary(self):
++        """Print summary statistics."""
++        metrics = self.calculate_metrics()
++
++        print("\n" + "="*60)
++        print("BENCHMARK ANALYSIS SUMMARY")
++        print("="*60)
++
++        print(
++            f"\nPopulation sizes tested: {[f'{p//1000}k' for p in self.population_sizes]}")
++
++        print(f"\nScaling Analysis:")
++        print(
++            f"  MEmilio scaling exponent: {metrics['memilio_scaling']['exponent']:.3f} (R² = {metrics['memilio_scaling']['r_squared']:.3f})")
++        print(
++            f"  Covasim scaling exponent: {metrics['covasim_scaling']['exponent']:.3f} (R² = {metrics['covasim_scaling']['r_squared']:.3f})")
++
++        print(f"\nPerformance Summary:")
++        print(
++            f"  Average speedup (MEmilio vs Covasim): {np.mean(metrics['speedup']):.1f}x faster")
++        print(
++            f"  MEmilio runtime range: {min(self.memilio_times)*1000:.1f} - {max(self.memilio_times)*1000:.1f} ms/timestep")
++        print(
++            f"  Covasim runtime range: {min(self.covasim_times)*1000:.1f} - {max(self.covasim_times)*1000:.1f} ms/timestep")
++
++        print(f"\nEfficiency (ms per 1000 agents per timestep):")
++        for i, pop in enumerate(self.population_sizes):
++            memilio_eff = metrics['memilio_per_1k'][i] * 1000
++            covasim_eff = metrics['covasim_per_1k'][i] * 1000
++            print(
++                f"  {pop//1000:4}k agents: MEmilio {memilio_eff:.2f}ms, Covasim {covasim_eff:.2f}ms")
++
++        print("="*60)
++
++    def print_weak_scaling_efficiency(self, raw_data):
++        """Print a table showing weak scaling efficiency."""
++        num_cores = [1, 2, 4, 8, 16, 32]
++
++        # Calculate efficiency as percentage (ideal runtime / actual runtime * 100)
++        # Ideal runtime is the runtime with 1 core
++
++        def calculate_efficiency(runtimes):
++            ideal = runtimes[0]
++            return [(ideal / runtime * 100) for runtime in runtimes]
++
++        eff_250k = calculate_efficiency(raw_data.memilio_weak_scaling_250k)
++        eff_500k = calculate_efficiency(raw_data.memilio_weak_scaling_500k)
++        eff_1m = calculate_efficiency(raw_data.memilio_weak_scaling_1m)
++        eff_2m = calculate_efficiency(raw_data.memilio_weak_scaling_2m)
++
++        print("\n" + "="*95)
++        print("WEAK SCALING EFFICIENCY TABLE: ABM")
++        print("="*95)
++        print(f"{'Cores':>8} | {'250k agents/core':>20} | {'500k agents/core':>20} | {'1M agents/core':>20} | {'2M agents/core':>20}")
++        print(f"{'':>8} | {'Efficiency (%)':>20} | {'Efficiency (%)':>20} | {'Efficiency (%)':>20} | {'Efficiency (%)':>20}")
++        print("-"*95)
++
++        for i, cores in enumerate(num_cores):
++            print(
++                f"{cores:>8} | {eff_250k[i]:>19.1f}% | {eff_500k[i]:>19.1f}% | {eff_1m[i]:>19.1f}% | {eff_2m[i]:>19.1f}%")
++
++        print("="*95)
++        print("\nNote: Efficiency = (Runtime with 1 core / Runtime with N cores) × 100%")
++        print(
++            "      100% efficiency means perfect weak scaling (constant runtime per core)")
++        print()
++
++    def print_strong_scaling_efficiency(self, raw_data):
++        """Print a table showing strong scaling efficiency."""
++        # One node strong scaling
++        cores_one_node = raw_data.strong_scaling_cores[0:len(
++            raw_data.memilio_strong_scaling_128_runs_one_node)]
++        runtimes_one_node = raw_data.memilio_strong_scaling_128_runs_one_node[0:]
++
++        # Multi-node strong scaling
++        nodes_multi = raw_data.strong_scaling_nodes[0:len(
++            raw_data.memilio_strong_scaling_128_runs_multiple_nodes)]
++        runtimes_multi = raw_data.memilio_strong_scaling_128_runs_multiple_nodes[0:]
++
++        def calculate_strong_efficiency(baseline, runtimes, units):
++            """Calculate strong scaling efficiency: (baseline / (runtime * units)) * 100"""
++            return [(baseline / (runtime * unit) * 100) for runtime, unit in zip(runtimes, units)]
++
++        print("\n" + "="*70)
++        print("STRONG SCALING EFFICIENCY TABLE: ABM")
++        print("="*70)
++
++        # One node tablez
++        if len(runtimes_one_node) > 0:
++            print("\nOne Node Strong Scaling:")
++            print(
++                f"{'Cores':>10} | {'Runtime (s)':>15} | {'Speedup':>10} | {'Efficiency (%)':>15}")
++            print("-"*70)
++            baseline_one = runtimes_one_node[0] * cores_one_node[0]
++            for i, cores in enumerate(cores_one_node):
++                speedup = baseline_one / runtimes_one_node[i]
++                efficiency = (speedup / cores) * 100
++                print(
++                    f"{cores:>10} | {runtimes_one_node[i]:>15.2f} | {speedup:>10.2f} | {efficiency:>15.1f}%")
++
++        # Multi-node table
++        if len(runtimes_multi) > 0:
++            print("\nMulti-Node Strong Scaling:")
++            print(
++                f"{'Nodes':>10} | {'Runtime (s)':>15} | {'Speedup':>10} | {'Efficiency (%)':>15}")
++            print("-"*70)
++            baseline_multi = runtimes_multi[0] * nodes_multi[0]
++            for i, nodes in enumerate(nodes_multi):
++                speedup = baseline_multi / runtimes_multi[i]
++                efficiency = (speedup / nodes) * 100
++                print(
++                    f"{nodes:>10} | {runtimes_multi[i]:>15.2f} | {speedup:>10.2f} | {efficiency:>15.1f}%")
++
++        print("="*70)
++        print("\nNote: Efficiency = (Speedup / Number of cores or nodes) × 100%")
++        print("      100% efficiency means perfect linear scaling")
++        print()
++
++
++def main():
++    parser = argparse.ArgumentParser(
++        description='Enhanced benchmark analysis tool')
++    parser.add_argument('--save', type=str,
++                        help='Save plots to specified directory')
++    parser.add_argument('--data-file', type=str,
++                        help='Save/load data to/from this JSON file')
++    parser.add_argument('--no-show', action='store_true',
++                        help='Don\'t display plots')
++
++    args = parser.parse_args()
++
++    args.save = "/Users/saschakorf/Nosynch/Arbeit/memilio/example_results"
++
++    # Create analyzer and raw data
++    analyzer = BenchmarkAnalyzer(fontsize=20)
++    raw_data = rawData()
++
++    # Create plots
++    save_dir = Path(args.save) if args.save else None
++    if save_dir:
++        save_dir.mkdir(exist_ok=True)
++
++    # Plot 1: Agent scaling with memilio (1, 4, 16 cores), covasim, and opencovid
++    agent_scaling_path = save_dir / 'agent_scaling.png' if save_dir else None
++    fig1, ax1 = analyzer.plot_agent_scaling(raw_data, agent_scaling_path)
++
++    # Plot 2: Weak scaling
++    weak_scaling_path = save_dir / 'weak_scaling.png' if save_dir else None
++    fig2, ax2 = analyzer.plot_weak_scaling(raw_data, weak_scaling_path)
++
++    # Plot 3: One node strong scaling
++    one_node_strong_path = save_dir / \
++        'strong_scaling_one_node.png' if save_dir else None
++    fig3, ax3 = analyzer.plot_one_node_strong_scaling(
++        raw_data, one_node_strong_path)
++
++    # Plot 4: Multi-node strong scaling
++    multi_node_strong_path = save_dir / \
++        'strong_scaling_multi_node.png' if save_dir else None
++    fig4, ax4 = analyzer.plot_multi_node_strong_scaling(
++        raw_data, multi_node_strong_path)
++
++    # Print efficiency tables
++    analyzer.print_weak_scaling_efficiency(raw_data)
++    analyzer.print_strong_scaling_efficiency(raw_data)
++
++    # Save data if requested
++    if args.data_file:
++        analyzer.save_data_to_file(args.data_file)
++
++    # Show plots unless disabled
++    if not args.no_show:
++        plt.show()
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/cpp/benchmarks/covasim_benchmark.py b/cpp/benchmarks/covasim_benchmark.py
+new file mode 100644
+index 000000000..e691b320c
+--- /dev/null
++++ b/cpp/benchmarks/covasim_benchmark.py
+@@ -0,0 +1,78 @@
++# import os
++# # Choose sensible values for your machine; start with physical core count
++# os.environ["NUMBA_NUM_THREADS"] = "8"       # Numba worker pool size
++# os.environ["NUMBA_THREADING_LAYER"] = "omp"  # or 'tbb'/'omp' if available
++
++# # BLAS/LAPACK backends (pick what your NumPy uses)
++# os.environ["OMP_NUM_THREADS"] = "8"         # OpenMP
++# os.environ["OPENBLAS_NUM_THREADS"] = "8"    # OpenBLAS
++# os.environ["MKL_NUM_THREADS"] = "8"         # Intel MKL
++
++import covasim as cv
++import time
++import sys
++
++
++def covasim_benchmark(pop_size, n_days=120):
++    """
++    Benchmark covasim simulation with specified population size.
++
++    Args:
++        pop_size: Number of agents in the simulation
++        n_days: Number of days to simulate (default 120 to match ABM 5 days * 24)
++
++    Returns:
++        Runtime in seconds
++    """
++    # Calculate initial infections as 0.05% of population (matching ABM benchmark)
++    pop_infected = max(1, int(pop_size * 0.0005))
++
++    pars = dict(
++        pop_size=pop_size,
++        pop_infected=pop_infected,
++        start_day='2025-01-01',
++        n_days=n_days,
++        pop_type='hybrid',
++        location='Germany',
++        rescale=False
++    )
++
++    sim = cv.Sim(pars)
++    cv.options.set(numba_parallel='full')
++    sim.initialize()
++
++    t_start = time.process_time()
++    sim.run(verbose=0)
++    t_end = time.process_time()
++
++    runtime = t_end - t_start
++    print(f"Population size: {pop_size:,}, Runtime: {runtime:.3f}s")
++    return runtime
++
++
++if __name__ == "__main__":
++    # Population sizes matching the ABM benchmark
++    pop_sizes = [1000000, 2000000, 4000000, 8000000,
++                 16000000, 32000000, 64000000]
++    # pop_sizes = [256000000, 512000000, 1024000000]
++
++    # If command line argument provided, use that specific size
++    if len(sys.argv) > 1:
++        try:
++            pop_size = int(sys.argv[1])
++            covasim_benchmark(pop_size)
++        except ValueError:
++            print("Usage: python covasim_benchmark.py [population_size]")
++            sys.exit(1)
++    else:
++        # Run all benchmark sizes
++        print("Running Covasim benchmarks with population sizes matching ABM benchmark:")
++        print("=" * 60)
++
++        total_time = 0
++        for pop_size in pop_sizes:
++            runtime = covasim_benchmark(pop_size)
++            total_time += runtime
++
++        print("=" * 60)
++        print(f"Total runtime for all benchmarks: {total_time:.3f}s")
+diff --git a/cpp/memilio/compartments/parameter_studies.h b/cpp/memilio/compartments/parameter_studies.h
+index 6de772c36..516476fc2 100644
+--- a/cpp/memilio/compartments/parameter_studies.h
++++ b/cpp/memilio/compartments/parameter_studies.h
+@@ -21,118 +21,134 @@
+ #define MIO_COMPARTMENTS_PARAMETER_STUDIES_H
+ 
+ #include "memilio/io/binary_serializer.h"
++#include "memilio/io/io.h"
+ #include "memilio/mobility/graph_simulation.h"
+ #include "memilio/utils/logging.h"
++#include "memilio/utils/metaprogramming.h"
+ #include "memilio/utils/miompi.h"
+ #include "memilio/utils/random_number_generator.h"
+-#include "memilio/utils/time_series.h"
+ #include "memilio/mobility/metapopulation_mobility_instant.h"
+-#include "memilio/compartments/simulation.h"
+ 
++#include <cassert>
+ #include <cmath>
++#include <concepts>
+ #include <cstdint>
+-#include <iterator>
+-#include <limits>
+-#include <numeric>
++#include <type_traits>
++#include <utility>
++#include <vector>
+ 
+ namespace mio
+ {
+ 
+ /**
+- * Class that performs multiple simulation runs with randomly sampled parameters.
+- * Can simulate mobility graphs with one simulation in each node or single simulations.
+- * @tparam S type of simulation that runs in one node of the graph.
++ * @brief Class used to perform multiple simulation runs with randomly sampled parameters.
++ * Note that the type of simulation is not determined until calling one of the run functions.
++ * @tparam ParameterType The parameters used to create simulations.
++ * @tparam TimeType The time type used by the simulation, e.g. double or TimePoint.
++ * @tparam StepType The time step type used by the simulation, e.g. double or TimeStep. May be the same as TimeType.
+  */
+-template <typename FP, class S>
++template <class ParameterType, typename TimeType, typename StepType = TimeType>
+ class ParameterStudy
+ {
+ public:
+-    /**
+-    * The type of simulation of a single node of the graph.
+-    */
+-    using Simulation = S;
+-    /**
+-    * The Graph type that stores the parametes of the simulation.
+-    * This is the input of ParameterStudies.
+-    */
+-    using ParametersGraph = Graph<typename Simulation::Model, MobilityParameters<FP>>;
+-    /**
+-    * The Graph type that stores simulations and their results of each run.
+-    * This is the output of ParameterStudies for each run.
+-    */
+-    using SimulationGraph = Graph<SimulationNode<FP, Simulation>, MobilityEdge<FP>>;
++    using Parameters = ParameterType;
++    using Time       = TimeType;
++    using Step       = StepType;
++
++private:
++    template <class CreateSimulationFunction>
++        requires std::is_invocable_v<CreateSimulationFunction, Parameters, Time, Step, size_t>
++    using SimulationT = std::decay_t<std::invoke_result_t<CreateSimulationFunction, Parameters, Time, Step, size_t>>;
++
++    template <class CreateSimulationFunction, class ProcessSimulationResultFunction>
++        requires std::is_invocable_v<ProcessSimulationResultFunction, SimulationT<CreateSimulationFunction>, size_t>
++    using ProcessedResultT = std::decay_t<
++        std::invoke_result_t<ProcessSimulationResultFunction, SimulationT<CreateSimulationFunction>, size_t>>;
++
++public:
++    // TODO: replacement for "set_params_distributions_normal"? Maybe a special ctor for UncertainParameterSet?
+ 
+     /**
+-     * create study for graph of compartment models.
+-     * @param graph graph of parameters
+-     * @param t0 start time of simulations
+-     * @param tmax end time of simulations
+-     * @param graph_sim_dt time step of graph simulation
+-     * @param num_runs number of runs
++     * @brief Create a parameter study with some parameters.
++     * The simulation type is determined when calling any "run" member function.
++     * @param parameters The parameters used to create simulations.
++     * @param t0 Start time of simulations.
++     * @param tmax End time of simulations.
++     * @param dt Initial time step of simulations.
++     * @param num_runs Number of simulations that will be created and run.
+      */
+-    ParameterStudy(const ParametersGraph& graph, FP t0, FP tmax, FP graph_sim_dt, size_t num_runs)
+-        : m_graph(graph)
++    ParameterStudy(const Parameters& parameters, Time t0, Time tmax, Step dt, size_t num_runs)
++        : m_parameters(parameters)
+         , m_num_runs(num_runs)
+         , m_t0{t0}
+         , m_tmax{tmax}
+-        , m_dt_graph_sim(graph_sim_dt)
++        , m_dt(dt)
+     {
+     }
+ 
+     /**
+-     * create study for graph of compartment models.
+-     * Creates distributions for all parameters of the models in the graph.
+-     * @param graph graph of parameters
+-     * @param t0 start time of simulations
+-     * @param tmax end time of simulations
+-     * @param dev_rel relative deviation of the created distributions from the initial value.
+-     * @param graph_sim_dt time step of graph simulation
+-     * @param num_runs number of runs
++     * @brief Run all simulations in serial.
++     * @param[in] create_simulation A callable sampling the study's parameters and returning a simulation.
++     * @param[in] process_simulation_result (Optional) A callable that takes the simulation and processes its result.
++     * @return A vector that contains (processed) simulation results for each run.
++     *
++     * Important side effect: Calling this function overwrites seed and counter of thread_local_rng().
++     * Use this RNG when sampling parameters in create_simulation.
++     *
++     * The function signature for create_simulation is
++     * `SimulationT(const Parameters& study_parameters, Time t0, Step dt, size_t run_idx)`,
++     * where SimulationT is some kind of simulation.
++     * The function signature for process_simulation_result is
++     * `ProcessedResultT(SimulationT&&, size_t run_index)`,
++     * where ProcessedResultT is a (de)serializable result.
++     * @{
+      */
+-    ParameterStudy(const ParametersGraph& graph, FP t0, FP tmax, FP dev_rel, FP graph_sim_dt, size_t num_runs)
+-        : ParameterStudy<FP, Simulation>(graph, t0, tmax, graph_sim_dt, num_runs)
++    template <class CreateSimulationFunction, class ProcessSimulationResultFunction>
++    std::vector<ProcessedResultT<CreateSimulationFunction, ProcessSimulationResultFunction>>
++    run_serial(CreateSimulationFunction&& create_simulation,
++               ProcessSimulationResultFunction&& process_simulation_result)
+     {
+-        for (auto& params_node : m_graph.nodes()) {
+-            set_params_distributions_normal(params_node, t0, tmax, dev_rel);
+-        }
++        return run_impl(0, m_num_runs, std::forward<CreateSimulationFunction>(create_simulation),
++                        std::forward<ProcessSimulationResultFunction>(process_simulation_result));
+     }
+ 
+-    /**
+-     * @brief Create study for single compartment model.
+-     * @param model compartment model with initial values
+-     * @param t0 start time of simulations
+-     * @param tmax end time of simulations
+-     * @param num_runs number of runs in ensemble run
+-     */
+-    ParameterStudy(typename Simulation::Model const& model, FP t0, FP tmax, size_t num_runs)
+-        : ParameterStudy<FP, Simulation>({}, t0, tmax, tmax - t0, num_runs)
++    template <class CreateSimulationFunction>
++    std::vector<SimulationT<CreateSimulationFunction>> run_serial(CreateSimulationFunction&& create_simulation)
+     {
+-        m_graph.add_node(0, model);
++        return run_serial(
++            std::forward<CreateSimulationFunction>(create_simulation),
++            [](SimulationT<CreateSimulationFunction>&& sim, size_t) -> SimulationT<CreateSimulationFunction>&& {
++                return std::move(sim);
++            });
+     }
++    /** @} */
+ 
+     /**
+-     * @brief Carry out all simulations in the parameter study.
+-     * Save memory and enable more runs by immediately processing and/or discarding the result.
+-     * The result processing function is called when a run is finished. It receives the result of the run
+-     * (a SimulationGraph object) and an ordered index. The values returned by the result processing function
+-     * are gathered and returned as a list.
+-     * This function is parallelized if memilio is configured with MEMILIO_ENABLE_MPI.
+-     * The MPI processes each contribute a share of the runs. The sample function and result processing function
+-     * are called in the same process that performs the run. The results returned by the result processing function are
+-     * gathered at the root process and returned as a list by the root in the same order as if the programm
+-     * were running sequentially. Processes other than the root return an empty list.
+-     * @param sample_graph Function that receives the ParametersGraph and returns a sampled copy.
+-     * @param result_processing_function Processing function for simulation results, e.g., output function.
+-     * @returns At the root process, a list of values per run that have been returned from the result processing function.
+-     *          At all other processes, an empty list.
+-     * @tparam SampleGraphFunction Callable type, accepts instance of ParametersGraph.
+-     * @tparam HandleSimulationResultFunction Callable type, accepts instance of SimulationGraph and an index of type size_t.
++     * @brief Run all simulations distributed over multiple MPI ranks.
++     * @param[in] create_simulation A callable sampling the study's parameters and returning a simulation.
++     * @param[in] process_simulation_result A callable that takes the simulation and processes its result.
++     * @return A vector that contains processed simulation results for each run.
++     *
++     * Important: Do not forget to use mio::mpi::init and finalize when using this function!
++     *
++     * Important side effect: Calling this function overwrites seed and counter of thread_local_rng().
++     * Use this RNG when sampling parameters in create_simulation.
++     *
++     * The function signature for create_simulation is
++     * `SimulationT(const Parameters& study_parameters, Time t0, Step dt, size_t run_idx)`,
++     * where SimulationT is some kind of simulation.
++     * The function signature for process_simulation_result is
++     * `ProcessedResultT(SimulationT&&, size_t run_index)`,
++     * where ProcessedResultT is a (de)serializable result.
+      */
+-    template <class SampleGraphFunction, class HandleSimulationResultFunction>
+-    std::vector<std::invoke_result_t<HandleSimulationResultFunction, SimulationGraph, size_t>>
+-    run(SampleGraphFunction sample_graph, HandleSimulationResultFunction result_processing_function)
++    template <class CreateSimulationFunction, class ProcessSimulationResultFunction>
++    std::vector<ProcessedResultT<CreateSimulationFunction, ProcessSimulationResultFunction>>
++    run(CreateSimulationFunction&& create_simulation, ProcessSimulationResultFunction&& process_simulation_result)
+     {
++        using EnsembleResultT =
++            std::vector<ProcessedResultT<CreateSimulationFunction, ProcessSimulationResultFunction>>;
+         int num_procs, rank;
++
+ #ifdef MEMILIO_ENABLE_MPI
+         MPI_Comm_size(mpi::get_world(), &num_procs);
+         MPI_Comm_rank(mpi::get_world(), &rank);
+@@ -145,40 +161,15 @@ public:
+         //So we set our own RNG to be used.
+         //Assume that sampling uses the thread_local_rng() and isn't multithreaded
+         m_rng.synchronize();
+-        thread_local_rng() = m_rng;
+ 
+-        auto run_distribution = distribute_runs(m_num_runs, num_procs);
+-        auto start_run_idx =
++        std::vector<size_t> run_distribution = distribute_runs(m_num_runs, num_procs);
++        size_t start_run_idx =
+             std::accumulate(run_distribution.begin(), run_distribution.begin() + size_t(rank), size_t(0));
+-        auto end_run_idx = start_run_idx + run_distribution[size_t(rank)];
+-
+-        std::vector<std::invoke_result_t<HandleSimulationResultFunction, SimulationGraph, size_t>> ensemble_result;
+-        ensemble_result.reserve(m_num_runs);
+-
+-        for (size_t run_idx = start_run_idx; run_idx < end_run_idx; run_idx++) {
+-            log(LogLevel::info, "ParameterStudies: run {}", run_idx);
+-
+-            //prepare rng for this run by setting the counter to the right offset
+-            //Add the old counter so that this call of run() produces different results
+-            //from the previous call
+-            auto run_rng_counter = m_rng.get_counter() + rng_totalsequence_counter<uint64_t>(
+-                                                             static_cast<uint32_t>(run_idx), Counter<uint32_t>(0));
+-            thread_local_rng().set_counter(run_rng_counter);
+-
+-            //sample
+-            auto sim = create_sampled_simulation(sample_graph);
+-            log(LogLevel::info, "ParameterStudies: Generated {} random numbers.",
+-                (thread_local_rng().get_counter() - run_rng_counter).get());
+-
+-            //perform run
+-            sim.advance(m_tmax);
++        size_t end_run_idx = start_run_idx + run_distribution[size_t(rank)];
+ 
+-            //handle result and store
+-            ensemble_result.emplace_back(result_processing_function(std::move(sim).get_graph(), run_idx));
+-        }
+-
+-        //Set the counter of our RNG so that future calls of run() produce different parameters.
+-        m_rng.set_counter(m_rng.get_counter() + rng_totalsequence_counter<uint64_t>(m_num_runs, Counter<uint32_t>(0)));
++        EnsembleResultT ensemble_result =
++            run_impl(start_run_idx, end_run_idx, std::forward<CreateSimulationFunction>(create_simulation),
++                     std::forward<ProcessSimulationResultFunction>(process_simulation_result));
+ 
+ #ifdef MEMILIO_ENABLE_MPI
+         //gather results
+@@ -189,7 +180,7 @@ public:
+                 ByteStream bytes(bytes_size);
+                 MPI_Recv(bytes.data(), bytes.data_size(), MPI_BYTE, src_rank, 0, mpi::get_world(), MPI_STATUS_IGNORE);
+ 
+-                auto src_ensemble_results = deserialize_binary(bytes, Tag<decltype(ensemble_result)>{});
++                IOResult<EnsembleResultT> src_ensemble_results = deserialize_binary(bytes, Tag<EnsembleResultT>{});
+                 if (!src_ensemble_results) {
+                     log_error("Error receiving ensemble results from rank {}.", src_rank);
+                 }
+@@ -198,8 +189,8 @@ public:
+             }
+         }
+         else {
+-            auto bytes      = serialize_binary(ensemble_result);
+-            auto bytes_size = int(bytes.data_size());
++            ByteStream bytes = serialize_binary(ensemble_result);
++            int bytes_size   = int(bytes.data_size());
+             MPI_Send(&bytes_size, 1, MPI_INT, 0, 0, mpi::get_world());
+             MPI_Send(bytes.data(), bytes.data_size(), MPI_BYTE, 0, 0, mpi::get_world());
+             ensemble_result.clear(); //only return root process
+@@ -209,154 +200,122 @@ public:
+         return ensemble_result;
+     }
+ 
+-    /**
+-     * @brief Carry out all simulations in the parameter study.
+-     * Convenience function for a few number of runs, but can use more memory because it stores all runs until the end.
+-     * Unlike the other overload, this function is not MPI-parallel.
+-     * @return vector of SimulationGraph for each run.
+-     */
+-    template <class SampleGraphFunction>
+-    std::vector<SimulationGraph> run(SampleGraphFunction sample_graph)
+-    {
+-        std::vector<SimulationGraph> ensemble_result;
+-        ensemble_result.reserve(m_num_runs);
+-
+-        //The ParameterDistributions used for sampling parameters use thread_local_rng()
+-        //So we set our own RNG to be used.
+-        //Assume that sampling uses the thread_local_rng() and isn't multithreaded
+-        thread_local_rng() = m_rng;
+-
+-        for (size_t i = 0; i < m_num_runs; i++) {
+-            log(LogLevel::info, "ParameterStudies: run {}", i);
+-
+-            //prepare rng for this run by setting the counter to the right offset
+-            //Add the old counter so that this call of run() produces different results
+-            //from the previous call
+-            auto run_rng_counter = m_rng.get_counter() +
+-                                   rng_totalsequence_counter<uint64_t>(static_cast<uint32_t>(i), Counter<uint32_t>(0));
+-            thread_local_rng().set_counter(run_rng_counter);
+-
+-            auto sim = create_sampled_simulation(sample_graph);
+-            log(LogLevel::info, "ParameterStudies: Generated {} random numbers.",
+-                (thread_local_rng().get_counter() - run_rng_counter).get());
+-
+-            sim.advance(m_tmax);
+-
+-            ensemble_result.emplace_back(std::move(sim).get_graph());
+-        }
+-
+-        //Set the counter of our RNG so that future calls of run() produce different parameters.
+-        m_rng.set_counter(m_rng.get_counter() + rng_totalsequence_counter<uint64_t>(m_num_runs, Counter<uint32_t>(0)));
+-
+-        return ensemble_result;
+-    }
+-
+-    /**
+-     * @brief sets the number of Monte Carlo runs
+-     * @param[in] num_runs number of runs
+-     */
+-    void set_num_runs(size_t num_runs)
+-    {
+-        m_num_runs = num_runs;
+-    }
+-
+-    /**
+-     * @brief returns the number of Monte Carlo runs
+-     */
+-    int get_num_runs() const
+-    {
+-        return static_cast<int>(m_num_runs);
+-    }
+-
+-    /**
+-     * @brief sets end point in simulation
+-     * @param[in] tmax end point in simulation
+-     */
+-    void set_tmax(FP tmax)
++    /// @brief Return the number of total runs that the study will make.
++    size_t get_num_runs() const
+     {
+-        m_tmax = tmax;
++        return m_num_runs;
+     }
+ 
+-    /**
+-     * @brief returns end point in simulation
+-     */
+-    FP get_tmax() const
++    /// @brief Return the final time point for simulations.
++    Time get_tmax() const
+     {
+         return m_tmax;
+     }
+ 
+-    void set_t0(FP t0)
+-    {
+-        m_t0 = t0;
+-    }
+-
+-    /**
+-     * @brief returns start point in simulation
+-     */
+-    FP get_t0() const
++    /// @brief Return the initial time point for simulations.
++    Time get_t0() const
+     {
+         return m_t0;
+     }
+ 
+-    /**
+-     * Get the input model that the parameter study is run for.
+-     * Use for single node simulations, use get_model_graph for graph simulations.
+-     * @{
+-     */
+-    const typename Simulation::Model& get_model() const
+-    {
+-        return m_graph.nodes()[0].property;
+-    }
+-    typename Simulation::Model& get_model()
++    /// @brief Return the initial step sized used by simulations.
++    Time get_dt() const
+     {
+-        return m_graph.nodes()[0].property;
++        return m_dt;
+     }
+-    /** @} */
+ 
+     /**
+-     * Get the input graph that the parameter study is run for.
+-     * Use for graph simulations, use get_model for single node simulations.
++     * @brief Get the input parameters that each simulation in the study is created from.
+      * @{
+      */
+-    const ParametersGraph& get_model_graph() const
++    const Parameters& get_parameters() const
+     {
+-        return m_graph;
++        return m_parameters;
+     }
+-    ParametersGraph& get_model_graph()
++    Parameters& get_parameters()
+     {
+-        return m_graph;
++        return m_parameters;
+     }
+     /** @} */
+ 
++    /// @brief Access the study's random number generator.
+     RandomNumberGenerator& get_rng()
+     {
+         return m_rng;
+     }
+ 
+ private:
+-    //sample parameters and create simulation
+-    template <class SampleGraphFunction>
+-    GraphSimulation<FP, SimulationGraph, FP, FP> create_sampled_simulation(SampleGraphFunction sample_graph)
++    /**
++     * @brief Main loop creating and running simulations.
++     * @param[in] start_run_idx, end_run_idx Range of indices. Performs one run for each index.
++     * @param[in] create_simulation A callable sampling the study's parameters and return a simulation.
++     * @param[in] process_simulation_result A callable that takes the simulation and processes its result.
++     * @return A vector that contains processed simulation results for each run.
++     *
++     * Important side effect: Calling this function overwrites seed and counter of thread_local_rng().
++     * Use this RNG when sampling parameters in create_simulation.
++     */
++    template <class CreateSimulationFunction, class ProcessSimulationResultFunction>
++    std::vector<ProcessedResultT<CreateSimulationFunction, ProcessSimulationResultFunction>>
++    run_impl(size_t start_run_idx, size_t end_run_idx, CreateSimulationFunction&& create_simulation,
++             ProcessSimulationResultFunction&& process_simulation_result)
+     {
+-        SimulationGraph sim_graph;
++        assert(start_run_idx <= end_run_idx);
+ 
+-        auto sampled_graph = sample_graph(m_graph);
+-        for (auto&& node : sampled_graph.nodes()) {
+-            sim_graph.add_node(node.id, node.property, m_t0, m_dt_integration);
+-        }
+-        for (auto&& edge : sampled_graph.edges()) {
+-            sim_graph.add_edge(edge.start_node_idx, edge.end_node_idx, edge.property);
++        // Note that this overwrites seed and counter of thread_local_rng, but it does not replace it.
++        thread_local_rng() = m_rng;
++
++        std::vector<ProcessedResultT<CreateSimulationFunction, ProcessSimulationResultFunction>> ensemble_result;
++        ensemble_result.reserve(m_num_runs);
++
++        for (size_t run_idx = start_run_idx; run_idx < end_run_idx; run_idx++) {
++            log(LogLevel::info, "ParameterStudies: run {}", run_idx);
++
++            //prepare rng for this run by setting the counter to the right offset
++            //Add the old counter so that this call of run() produces different results
++            //from the previous call
++            Counter<uint64_t> run_rng_counter =
++                m_rng.get_counter() +
++                rng_totalsequence_counter<uint64_t>(static_cast<uint32_t>(run_idx), Counter<uint32_t>(0));
++            thread_local_rng().set_counter(run_rng_counter);
++
++            //sample
++            SimulationT<CreateSimulationFunction> sim =
++                create_simulation(std::as_const(m_parameters), std::as_const(m_t0), std::as_const(m_dt), run_idx);
++
++            [[maybe_unused]] const uint64_t create_counter = (thread_local_rng().get_counter() - run_rng_counter).get();
++            log_debug("ParameterStudy: Generated {} random numbers creating simulation #{}.", create_counter, run_idx);
++
++            //perform run
++            sim.advance(m_tmax);
++
++            log_debug("ParameterStudy: Generated {} random numbers running simulation #{}.",
++                      run_rng_counter.get() - create_counter, run_idx);
++
++            //handle result and store
++            ensemble_result.emplace_back(process_simulation_result(std::move(sim), run_idx));
+         }
+ 
+-        return make_mobility_sim<FP, Simulation>(m_t0, m_dt_graph_sim, std::move(sim_graph));
++        //Set the counter of our RNG so that future calls of run() produce different parameters.
++        m_rng.set_counter(m_rng.get_counter() + rng_totalsequence_counter<uint64_t>(m_num_runs, Counter<uint32_t>(0)));
++
++        return ensemble_result;
+     }
+ 
+-    std::vector<size_t> distribute_runs(size_t num_runs, int num_procs)
++    /**
++     * @brief Distribute a number of runs over a number of processes.
++     * Processes with low ranks get additional runs, if the number is not evenly divisible.
++     * @param num_runs The total number of runs.
++     * @param num_procs The total number of processes, i.e. the size of MPI_Comm.
++     * @return A vector of size num_procs with the number of runs each process should make.
++     */
++    static std::vector<size_t> distribute_runs(size_t num_runs, int num_procs)
+     {
++        assert(num_procs > 0);
+         //evenly distribute runs
+         //lower processes do one more run if runs are not evenly distributable
+-        auto num_runs_local = num_runs / num_procs; //integer division!
+-        auto remainder      = num_runs % num_procs;
++        size_t num_runs_local = num_runs / num_procs; //integer division!
++        size_t remainder      = num_runs % num_procs;
+ 
+         std::vector<size_t> run_distribution(num_procs);
+         std::fill(run_distribution.begin(), run_distribution.begin() + remainder, num_runs_local + 1);
+@@ -365,24 +324,38 @@ private:
+         return run_distribution;
+     }
+ 
+-private:
+-    // Stores Graph with the names and ranges of all parameters
+-    ParametersGraph m_graph;
+-
+-    size_t m_num_runs;
+-
+-    // Start time (should be the same for all simulations)
+-    FP m_t0;
+-    // End time (should be the same for all simulations)
+-    FP m_tmax;
+-    // time step of the graph
+-    FP m_dt_graph_sim;
+-    // adaptive time step of the integrator (will be corrected if too large/small)
+-    FP m_dt_integration = 0.1;
+-    //
+-    RandomNumberGenerator m_rng;
++    ParameterType m_parameters; ///< Stores parameters used to create a simulation for each run.
++    size_t m_num_runs; ///< Total number of runs (i.e. simulations) to do when calling "run".
++    Time m_t0, m_tmax; ///< Start and end time for the simulations.
++    Step m_dt; ///< Initial step size of the simulation. Some integrators may adapt their step size during simulation.
++    RandomNumberGenerator m_rng; ///< The random number generator used by the study.
+ };
+ 
++/**
++ * @brief Create a GraphSimulation from a parameter graph.
++ * @param[in] sampled_graph A graph of models as nodes and mobility parameters as edges, with pre-sampled values.
++ * @param[in] t0 Start time of the graph simulation.
++ * @param[in] dt_node_sim (Initial) time step used by each node in the GraphSimulation.
++ * @param[in] dt_graph_sim Time step used by the GraphSimulation itself.
++ */
++template <typename FP, class Sim>
++auto make_sampled_graph_simulation(const Graph<typename Sim::Model, MobilityParameters<FP>>& sampled_graph, FP t0,
++                                   FP dt_node_sim, FP dt_graph_sim)
++{
++    using SimGraph = Graph<SimulationNode<FP, Sim>, MobilityEdge<FP>>;
++
++    SimGraph sim_graph;
++
++    for (auto&& node : sampled_graph.nodes()) {
++        sim_graph.add_node(node.id, node.property, t0, dt_node_sim);
++    }
++    for (auto&& edge : sampled_graph.edges()) {
++        sim_graph.add_edge(edge.start_node_idx, edge.end_node_idx, edge.property);
++    }
++
++    return make_mobility_sim<FP, Sim>(t0, dt_graph_sim, std::move(sim_graph));
++}
++
+ } // namespace mio
+ 
+ #endif // MIO_COMPARTMENTS_PARAMETER_STUDIES_H
+diff --git a/cpp/memilio/io/cli.h b/cpp/memilio/io/cli.h
+index 1f0fefcf6..395f8b1ce 100644
+--- a/cpp/memilio/io/cli.h
++++ b/cpp/memilio/io/cli.h
+@@ -293,6 +293,9 @@ public:
+             else { // deserialize failed
+                 // insert more information to the error message
+                 std::string msg = "While setting \"" + name + "\": " + param_result.error().message();
++                if (param_result.error().message() == "Json value is not a string.") {
++                    msg += " Try using escaped quotes (\\\") around your input strings.";
++                }
+                 return mio::failure(param_result.error().code(), msg);
+             }
+         })
+diff --git a/cpp/memilio/mobility/graph_simulation.h b/cpp/memilio/mobility/graph_simulation.h
+index 33770f8a4..0ceb33a82 100644
+--- a/cpp/memilio/mobility/graph_simulation.h
++++ b/cpp/memilio/mobility/graph_simulation.h
+@@ -31,10 +31,12 @@ namespace mio
+ /**
+  * @brief abstract simulation on a graph with alternating node and edge actions
+  */
+-template <class Graph, class Timepoint, class Timespan, class edge_f, class node_f>
++template <class GraphT, class Timepoint, class Timespan, class edge_f, class node_f>
+ class GraphSimulationBase
+ {
+ public:
++    using Graph = GraphT;
++
+     using node_function = node_f;
+     using edge_function = edge_f;
+ 
+diff --git a/cpp/memilio/mobility/metapopulation_mobility_instant.h b/cpp/memilio/mobility/metapopulation_mobility_instant.h
+index 7046cb63a..6f8a0b4c0 100644
+--- a/cpp/memilio/mobility/metapopulation_mobility_instant.h
++++ b/cpp/memilio/mobility/metapopulation_mobility_instant.h
+@@ -46,6 +46,8 @@ template <typename FP, class Sim>
+ class SimulationNode
+ {
+ public:
++    using Simulation = Sim;
++
+     template <class... Args, typename = std::enable_if_t<std::is_constructible<Sim, Args...>::value, void>>
+     SimulationNode(Args&&... args)
+         : m_simulation(std::forward<Args>(args)...)
+diff --git a/cpp/memilio/utils/base_dir.h b/cpp/memilio/utils/base_dir.h
+index 0b396ceb2..d390dcd6c 100644
+--- a/cpp/memilio/utils/base_dir.h
++++ b/cpp/memilio/utils/base_dir.h
+@@ -22,13 +22,15 @@
+ 
+ #include "memilio/config.h"
+ 
++#include <string>
++
+ namespace mio
+ {
+ 
+ /**
+- * @brief Returns path to the repo directory.
+-*/
+-constexpr std::string mio::base_dir()
++ * @brief Returns the absolute path to the project directory.
++ */
++const static std::string base_dir()
+ {
+     return MEMILIO_BASE_DIR;
+ }
+diff --git a/cpp/memilio/utils/index.h b/cpp/memilio/utils/index.h
+index 595db59f3..cba56b1d5 100644
+--- a/cpp/memilio/utils/index.h
++++ b/cpp/memilio/utils/index.h
+@@ -181,12 +181,20 @@ public:
+     std::tuple<Index<CategoryTag>...> indices;
+ };
+ 
+-template <size_t Index, class... CategoryTags>
+-struct type_at_index<Index, ::mio::Index<CategoryTags...>> : public type_at_index<Index, CategoryTags...> {
++/// Specialization of type_at_index for Index. @see type_at_index.
++template <size_t Tag, class... CategoryTags>
++struct type_at_index<Tag, ::mio::Index<CategoryTags...>> : public type_at_index<Tag, CategoryTags...> {
+ };
+ 
+-template <class CategoryTag, class... CategoryTags>
+-struct index_of_type<CategoryTag, ::mio::Index<CategoryTags...>> : public index_of_type<CategoryTag, CategoryTags...> {
++/// Specialization of index_of_type for Index. @see index_of_type.
++template <class Tag, class... CategoryTags>
++struct index_of_type<Tag, ::mio::Index<CategoryTags...>> : public index_of_type<Tag, CategoryTags...> {
++};
++
++/// Specialization of index_of_type for Index. Resolves ambiguity when using Index%s as items. @see index_of_type.
++template <class... CategoryTags>
++struct index_of_type<Index<CategoryTags...>, Index<CategoryTags...>> {
++    static constexpr std::size_t value = 0;
+ };
+ 
+ // retrieves the Index at the Ith position for a Index with more than one Tag
+diff --git a/cpp/memilio/utils/miompi.cpp b/cpp/memilio/utils/miompi.cpp
+index afbfcff11..807b8e448 100644
+--- a/cpp/memilio/utils/miompi.cpp
++++ b/cpp/memilio/utils/miompi.cpp
+@@ -18,6 +18,7 @@
+ * limitations under the License.
+ */
+ #include "memilio/utils/miompi.h"
++#include "memilio/utils/logging.h"
+ 
+ #ifdef MEMILIO_ENABLE_MPI
+ #include <mpi.h>
+@@ -41,6 +42,8 @@ void init()
+ {
+ #ifdef MEMILIO_ENABLE_MPI
+     MPI_Init(nullptr, nullptr);
++#else
++    mio::log_warning("Using mio::mpi::init without MPI being enabled.");
+ #endif
+ }
+ 
+diff --git a/cpp/memilio/utils/type_list.h b/cpp/memilio/utils/type_list.h
+index 6ff50a720..43d02aea1 100644
+--- a/cpp/memilio/utils/type_list.h
++++ b/cpp/memilio/utils/type_list.h
+@@ -61,6 +61,12 @@ template <class Type, class... Types>
+ struct index_of_type<Type, TypeList<Types...>> : public index_of_type<Type, Types...> {
+ };
+ 
++/// Specialization of index_of_type for TypeList. Resolves ambiguity when using TypeLists as items. @see index_of_type.
++template <class... Types>
++struct index_of_type<TypeList<Types...>, TypeList<Types...>> {
++    static constexpr std::size_t value = 0;
++};
++
+ } // namespace mio
+ 
+ #endif // MIO_UTILS_TYPE_LIST_H_
+diff --git a/cpp/models/abm/CMakeLists.txt b/cpp/models/abm/CMakeLists.txt
+index 50ce4258f..8884daaeb 100644
+--- a/cpp/models/abm/CMakeLists.txt
++++ b/cpp/models/abm/CMakeLists.txt
+@@ -4,6 +4,7 @@ add_library(abm
+     location_id.h
+     household.cpp
+     household.h
++    result_simulation.h
+     simulation.cpp
+     simulation.h
+     person.cpp
+@@ -34,6 +35,11 @@ add_library(abm
+     mask.h
+     mask.cpp
+     common_abm_loggers.h
++    city_builder.h
++    city_builder.cpp
++    city_parameters.h
++    parameter_setter.cpp
++    parameter_setter.h
+ )
+ target_link_libraries(abm PUBLIC memilio)
+ target_include_directories(abm PUBLIC
+diff --git a/cpp/models/abm/city_builder.cpp b/cpp/models/abm/city_builder.cpp
+new file mode 100644
+index 000000000..2caa074d5
+--- /dev/null
++++ b/cpp/models/abm/city_builder.cpp
+@@ -0,0 +1,785 @@
++#include "city_builder.h"
++#include "city_parameters.h"
++#include <random>
++#include <algorithm>
++#include <cmath>
++#include <iostream>
++#include <iomanip>
++#include <string>
++#include <numeric>
++#include "parameter_setter.h"
++
++// Define age groups as constants
++const mio::AgeGroup age_group_0_to_4(0);
++const mio::AgeGroup age_group_5_to_14(1);
++const mio::AgeGroup age_group_15_to_34(2);
++const mio::AgeGroup age_group_35_to_59(3);
++const mio::AgeGroup age_group_60_to_79(4);
++const mio::AgeGroup age_group_80_plus(5);
++
++mio::abm::Model CityBuilder::build_world(const CityConfig& config, const mio::RandomNumberGenerator& rng,
++                                         size_t num_agegroups)
++{
++    auto world      = mio::abm::Model(num_agegroups);
++    world.get_rng() = rng; // Set the random number generator for the world
++
++    // Get infrastructure configuration based on German demographic data
++    auto infra = config.infrastructure();
++
++    // Healthcare facilities
++    std::vector<mio::abm::LocationId> hospitals;
++    std::vector<mio::abm::LocationId> icus;
++
++    for (int i = 0; i < infra.num_hospitals; ++i) {
++        hospitals.push_back(world.add_location(mio::abm::LocationType::Hospital));
++    }
++    for (int i = 0; i < infra.num_icus; ++i) {
++        icus.push_back(world.add_location(mio::abm::LocationType::ICU));
++    }
++
++    // Create all location types based on German infrastructure ratios
++    auto households = create_households(
++        world, std::accumulate(infra.num_households_hh_size.begin(), infra.num_households_hh_size.end(), 0));
++    auto workplaces   = create_workplaces(world, infra.num_workplaces);
++    auto prim_schools = create_schools(world, infra.num_elementary_schools);
++    auto sec_schools  = create_schools(world, infra.num_secondary_schools);
++    auto shops        = create_shops(world, infra.num_stores);
++    auto events       = create_events(world, infra.num_events);
++
++    // Assign people to locations using German demographic distribution
++    create_and_assign_people_to_locations(world, households, workplaces, prim_schools, sec_schools, shops, events,
++                                          hospitals, icus, config.total_population, infra.num_households_hh_size,
++                                          infra);
++
++    world.parameters.get<mio::abm::AgeGroupGotoSchool>()[age_group_5_to_14]  = true;
++    world.parameters.get<mio::abm::AgeGroupGotoSchool>()[age_group_15_to_34] = true;
++    world.parameters.get<mio::abm::AgeGroupGotoWork>()[age_group_15_to_34]   = true;
++    world.parameters.get<mio::abm::AgeGroupGotoWork>()[age_group_35_to_59]   = true;
++
++    set_local_parameters(world);
++    set_parameters(world.parameters);
++    return world;
++}
++
++std::vector<mio::abm::LocationId> CityBuilder::create_households(mio::abm::Model& world, int num_households)
++{
++    std::vector<mio::abm::LocationId> household_ids;
++    household_ids.reserve(num_households);
++
++    for (int i = 0; i < num_households; ++i) {
++        auto household_id = world.add_location(mio::abm::LocationType::Home);
++        household_ids.push_back(household_id);
++    }
++
++    return household_ids;
++}
++
++std::vector<mio::abm::LocationId> CityBuilder::create_workplaces(mio::abm::Model& world, int num_workplaces)
++{
++    std::vector<mio::abm::LocationId> workplace_ids;
++    workplace_ids.reserve(num_workplaces);
++
++    for (int i = 0; i < num_workplaces; ++i) {
++        auto workplace_id = world.add_location(mio::abm::LocationType::Work);
++        workplace_ids.push_back(workplace_id);
++    }
++
++    return workplace_ids;
++}
++
++std::vector<mio::abm::LocationId> CityBuilder::create_schools(mio::abm::Model& world, int num_schools)
++{
++    std::vector<mio::abm::LocationId> school_ids;
++    school_ids.reserve(num_schools);
++
++    for (int i = 0; i < num_schools; ++i) {
++        auto school_id = world.add_location(mio::abm::LocationType::School);
++        school_ids.push_back(school_id);
++    }
++
++    return school_ids;
++}
++
++std::vector<mio::abm::LocationId> CityBuilder::create_events(mio::abm::Model& world, int num_events)
++{
++    std::vector<mio::abm::LocationId> event_ids;
++    event_ids.reserve(num_events);
++
++    // Create large events (concert halls, stadiums)
++    for (int i = 0; i < num_events; ++i) {
++        auto event_id = world.add_location(mio::abm::LocationType::SocialEvent);
++        event_ids.push_back(event_id);
++    }
++
++    return event_ids;
++}
++
++std::vector<mio::abm::LocationId> CityBuilder::create_shops(mio::abm::Model& world, int num_shops)
++{
++    std::vector<mio::abm::LocationId> shop_ids;
++    shop_ids.reserve(num_shops);
++
++    // Create grocery stores
++    for (int i = 0; i < num_shops; ++i) {
++        auto shop_id = world.add_location(mio::abm::LocationType::BasicsShop);
++        shop_ids.push_back(shop_id);
++    }
++
++    return shop_ids;
++}
++
++std::vector<int> CityBuilder::create_age_vector(int total_population)
++{
++    std::vector<int> age_vector;
++    age_vector.resize(6); // We have 6 age groups
++
++    // Use German age distribution from 2023 census data
++    for (size_t i = 0; i < CityParameters::GERMAN_AGE_DISTRIBUTION.size(); ++i) {
++        int age_group_population = static_cast<int>(total_population * CityParameters::GERMAN_AGE_DISTRIBUTION[i]);
++        age_vector.at(i)         = age_group_population;
++    }
++
++    // see if total population matches the expected distribution
++    int total_age_population = std::accumulate(age_vector.begin(), age_vector.end(), 0);
++    if (total_age_population != total_population) {
++        std::cerr << "Warning: Total population does not match expected distribution. "
++                  << "Expected: " << total_population << ", Actual: " << total_age_population << "\n";
++    }
++
++    return age_vector;
++}
++
++int CityBuilder::ageGroupTInt6(mio::AgeGroup age_group)
++{
++    if (age_group == age_group_0_to_4) {
++        return 0;
++    }
++    else if (age_group == age_group_5_to_14) {
++        return 1;
++    }
++    else if (age_group == age_group_15_to_34) {
++        return 2;
++    }
++    else if (age_group == age_group_35_to_59) {
++        return 3;
++    }
++    else if (age_group == age_group_60_to_79) {
++        return 4;
++    }
++    else if (age_group == age_group_80_plus) {
++        return 5;
++    }
++    else {
++        return -1;
++    }
++}
++
++void CityBuilder::create_and_assign_people_to_locations(
++    mio::abm::Model& world, const std::vector<mio::abm::LocationId>& household_locations,
++    const std::vector<mio::abm::LocationId>& workplaces, const std::vector<mio::abm::LocationId>& prim_schools,
++    const std::vector<mio::abm::LocationId>& sec_schools, const std::vector<mio::abm::LocationId>& shops,
++    const std::vector<mio::abm::LocationId>& events, const std::vector<mio::abm::LocationId>& hospitals,
++    const std::vector<mio::abm::LocationId>& icus, int total_population, std::vector<int>& hh_per_size,
++    const CityParameters::CityInfrastructure infra)
++{
++
++    // We need to create and assign persons.
++    // We just want to create them (with an age) and assign them (to a home, perhaps a school, perhaps work, the only icu, the only hospital, one event, one shop.
++
++    // With these rules:
++
++    //    We have 5 age groups:
++    //    0: 0-4 years
++    //    1: 5-14 years
++    //    2: 15-34 years
++    //    3: 35-64 years
++    //    4: 65+ years
++    // 1.
++    // Every household with persons in age group 0 and 1 needs to be paired with at least one other person in an age group 2 or 3. (At least but randomly.)
++    // 2.
++    // We assign maximum amount of num_elementary_schools to persons in age group 1
++    // 3.
++    // We assign maximum amount of num_sec_schools to persons first in age group 1 and then to age group 2
++    // 4.
++    // We assign the amount of working people randomly between the remaining persons in age group 2 and group 3, if there are any left, we assign them to group 4
++    // 5.
++    // Everybody gets assigned to the same ICU and Hospital.
++    // 6.
++    // Everybody gets assigned to a random social event and everybody whos not in age group 0 to a random Basic shop.
++
++    auto world_rng  = world.get_rng();
++    auto age_vector = create_age_vector(total_population);
++
++    std::vector<std::vector<mio::AgeGroup>> temp_households;
++    std::vector<int> remaining_ages = age_vector;
++
++    for (int hh_size = 1; hh_size <= 5; ++hh_size) {
++        int num_households = hh_per_size[hh_size - 1];
++
++        for (int hh = 0; hh < num_households; ++hh) {
++            std::vector<mio::AgeGroup> household;
++
++            // Check if we need to enforce the child-parent rule
++            bool needs_parent = false;
++
++            // First, randomly assign ages to fill the household
++            for (int person = 0; person < hh_size; ++person) {
++                // Find available age groups
++                std::vector<int> available_ages;
++                for (int age = 0; age < (int)remaining_ages.size(); ++age) {
++                    if (remaining_ages[age] > 0) {
++                        available_ages.push_back(age);
++                    }
++                }
++
++                if (available_ages.empty())
++                    break;
++
++                // Randomly select an age group
++                auto age         = mio::UniformIntDistribution<size_t>::get_instance()(world_rng, size_t(0),
++                                                                               available_ages.size() - 1);
++                int selected_age = available_ages[age];
++
++                household.push_back(static_cast<mio::AgeGroup>(selected_age));
++                remaining_ages[selected_age]--;
++
++                // Check if this person is a child (age 0 or 1)
++                if (selected_age == 0 || selected_age == 1) {
++                    needs_parent = true;
++                }
++            }
++
++            // If household has children but no adults, replace one person with an adult
++            if (needs_parent) {
++                bool has_adult = false;
++                for (const auto& age : household) {
++                    if (age != age_group_0_to_4 && age != age_group_5_to_14) {
++                        has_adult = true;
++                        break;
++                    }
++                }
++
++                if (!has_adult) {
++                    // Find a non-child to replace
++                    for (int i = 0; i < (int)household.size(); ++i) {
++                        auto current_age = household[i];
++                        if ((current_age == age_group_0_to_4) || (current_age == age_group_5_to_14)) {
++                            // Return this age to the pool
++                            remaining_ages[ageGroupTInt6(current_age)]++;
++
++                            // Find an available adult age (2-5)
++                            std::vector<int> adult_ages;
++                            for (int age = 2; age <= 5; ++age) {
++                                if (remaining_ages[age] > 0) {
++                                    adult_ages.push_back(age);
++                                }
++                            }
++
++                            if (!adult_ages.empty()) {
++                                auto adult_dist = mio::UniformIntDistribution<size_t>::get_instance()(
++                                    world_rng, size_t(0), adult_ages.size() - 1);
++                                int selected_adult = adult_ages[adult_dist];
++                                household[i]       = static_cast<mio::AgeGroup>(selected_adult);
++                                remaining_ages[selected_adult]--;
++                            }
++                            break;
++                        }
++                    }
++                }
++            }
++
++            temp_households.push_back(household);
++        }
++    }
++    // We shuffle the households to ensure randomness in assignment
++    std::shuffle(temp_households.begin(), temp_households.end(), world_rng);
++    // We now have a vector of households, each containing a vector of AgeGroups.
++    // Each household is a vector of AgeGroups, where each AgeGroup corresponds to a person in that household.
++    // For example, a household might look like this:
++    // [
++    //     [AgeGroup::AgeGroup_0_to_4, AgeGroup::AgeGroup_5_to_14],
++    //     [AgeGroup::AgeGroup_15_to_34, AgeGroup::AgeGroup_35_to_59],
++    //     [AgeGroup::AgeGroup_60_to_79, AgeGroup::AgeGroup_80_plus],
++    //     ...
++    // ]
++    // Each inner vector represents a household, and each AgeGroup represents a person in that household
++    // We will now create persons for each household and assign them to the household locations.
++
++    int household_index = 0;
++    for (const auto& household : temp_households) {
++        // Create a new household location
++        auto household_id = household_locations[household_index];
++        // Create persons for each age in the household
++        for (const auto& age : household) {
++            // Create a new person with the given age
++            auto person_id = world.add_person(household_id, age);
++            world.assign_location(person_id, household_id); // Assign the person to their household
++            // Assign the person to hospital and ICU (home is already assigned by add_person)
++            world.assign_location(person_id, hospitals[0]);
++            world.assign_location(person_id, icus[0]);
++        }
++        // Increment the household index
++        household_index++;
++    }
++
++    // Quick check if we created the right amount household sizes:
++    std::vector<int> household_sizes(5, 0);
++    for (const auto& loc : world.get_locations()) {
++        if (loc.get_type() != mio::abm::LocationType::Home) {
++            continue; // Only count households
++        }
++        household_sizes[world.get_number_persons(loc.get_id()) - 1]++;
++    }
++
++    for (size_t i = 0; i < household_sizes.size(); ++i) {
++        if (household_sizes[i] != hh_per_size[i]) {
++            std::cerr << "Error: Expected " << hh_per_size[i] << " households of size " << (i + 1) << ", but found "
++                      << household_sizes[i] << ".\n";
++        }
++    }
++
++    // Finally we assign schools, workplaces, shops, events to the persons based on their age groups and according to the rules:
++    int count_elementary_schools = 0;
++    int count_secondary_schools  = 0;
++    int count_shops              = 0;
++    int count_events             = 0;
++    int count_workers            = 0;
++
++    int number_of_4_to_14_years_old = age_vector[1];
++    int prim_overhang               = 0;
++    int sec_overhang                = 0;
++    if (number_of_4_to_14_years_old >= infra.num_persons_elementary_schools) {
++        if (number_of_4_to_14_years_old >= infra.num_persons_secondary_schools + infra.num_persons_elementary_schools) {
++            prim_overhang = 0;
++            sec_overhang  = 0;
++        }
++        else {
++            prim_overhang = 0;
++            sec_overhang  = infra.num_persons_secondary_schools + infra.num_persons_elementary_schools -
++                           number_of_4_to_14_years_old;
++        }
++    }
++    else {
++        prim_overhang = infra.num_persons_elementary_schools - number_of_4_to_14_years_old;
++        sec_overhang  = infra.num_persons_secondary_schools;
++    }
++
++    int amount_of_60plus_that_work = infra.num_worker - sec_overhang - age_vector[2] - age_vector[3];
++    if (amount_of_60plus_that_work < 0) {
++        amount_of_60plus_that_work = 0; // No one over 60 works
++    }
++
++    for (auto& person : world.get_persons()) {
++
++        if (person.get_age() != age_group_0_to_4) {
++            // Assign to a random shop if not in age group 0-4
++            auto shop_id = shops[count_shops % infra.num_stores];
++            world.assign_location(person.get_id(), shop_id);
++            count_shops++;
++        }
++        // Assign to a random event
++        auto event_id = events[count_events % infra.num_events];
++        world.assign_location(person.get_id(), event_id);
++        count_events++;
++
++        if (person.get_age() == age_group_5_to_14) {
++            // Assign to a school if in age group 5-14
++            if (count_elementary_schools < infra.num_persons_elementary_schools) {
++                auto school_id = prim_schools[count_elementary_schools % infra.num_elementary_schools];
++                world.assign_location(person.get_id(), school_id);
++                count_elementary_schools++;
++                continue;
++            }
++            else if (count_secondary_schools < infra.num_persons_secondary_schools) {
++                auto school_id = sec_schools[count_secondary_schools % infra.num_secondary_schools];
++                world.assign_location(person.get_id(), school_id);
++                count_secondary_schools++;
++                continue;
++            }
++        }
++        else if ((prim_overhang > 0 || sec_overhang > 0) && person.get_age() == age_group_15_to_34) {
++            if (prim_overhang > 0) {
++                // Assign to a primary school if there are overhangs
++                auto school_id = prim_schools[count_elementary_schools % infra.num_elementary_schools];
++                world.assign_location(person.get_id(), school_id);
++                count_elementary_schools++;
++                prim_overhang--;
++                continue;
++            }
++            else if (sec_overhang > 0) {
++                // Assign to a secondary school if there are overhangs
++                auto school_id = sec_schools[count_secondary_schools % infra.num_secondary_schools];
++                world.assign_location(person.get_id(), school_id);
++                count_secondary_schools++;
++                sec_overhang--;
++                continue;
++            }
++        }
++
++        else if (person.get_age() == age_group_35_to_59 || person.get_age() == age_group_15_to_34) {
++            // Assign to a workplace if in age group 35-59 or 15-34
++            if (count_workers < infra.num_worker) {
++                auto work_id = workplaces[count_workers % infra.num_workplaces];
++                world.assign_location(person.get_id(), work_id);
++                count_workers++;
++                continue;
++            }
++        }
++        else if (person.get_age() == age_group_60_to_79 || person.get_age() == age_group_80_plus) {
++            // Assign to a workplace if in age group 60-79 or 80+
++            if (amount_of_60plus_that_work > 0) {
++                auto work_id = workplaces[count_workers % infra.num_workplaces];
++                world.assign_location(person.get_id(), work_id);
++                count_workers++;
++                amount_of_60plus_that_work--;
++                continue;
++            }
++        }
++    }
++
++    int workerss         = 0;
++    int school_attendees = 0;
++    // Check if we did everything correctly
++    for (auto& person : world.get_persons()) {
++        // We count amount of workers and school attendees
++
++        auto home_loc     = person.get_assigned_location(mio::abm::LocationType::Home);
++        auto school_loc   = person.get_assigned_location(mio::abm::LocationType::School);
++        auto work_loc     = person.get_assigned_location(mio::abm::LocationType::Work);
++        auto event_loc    = person.get_assigned_location(mio::abm::LocationType::SocialEvent);
++        auto shop_loc     = person.get_assigned_location(mio::abm::LocationType::BasicsShop);
++        auto hospital_loc = person.get_assigned_location(mio::abm::LocationType::Hospital);
++        auto icu_loc      = person.get_assigned_location(mio::abm::LocationType::ICU);
++
++        if (school_loc != mio::abm::LocationId::invalid_id()) {
++            school_attendees++;
++        }
++        if (work_loc != mio::abm::LocationId::invalid_id()) {
++            workerss++;
++        }
++
++        if (home_loc == mio::abm::LocationId::invalid_id()) {
++            //Home
++            std::cerr << "Error: Person " << person.get_id() << " has no assigned home location.\n";
++        }
++        if (school_loc != mio::abm::LocationId::invalid_id() && work_loc != mio::abm::LocationId::invalid_id()) {
++            std::cerr << "Error: Person " << person.get_id() << " has an work and school place assigned.\n";
++        }
++
++        if (event_loc == mio::abm::LocationId::invalid_id()) {
++            //Event
++            std::cerr << "Error: Person " << person.get_id() << " has no assigned event location.\n";
++        }
++        if (shop_loc == mio::abm::LocationId::invalid_id() && person.get_age() != age_group_0_to_4) {
++            //Shop
++            std::cerr << "Error: Person " << person.get_id() << " has no assigned shop location.\n";
++        }
++
++        if (hospital_loc == mio::abm::LocationId::invalid_id()) {
++            //Hospital
++            std::cerr << "Error: Person " << person.get_id() << " has no assigned hospital location.\n";
++        }
++        if (icu_loc == mio::abm::LocationId::invalid_id()) {
++            //ICU
++            std::cerr << "Error: Person " << person.get_id() << " has no assigned ICU location.\n";
++        }
++    }
++
++    // Check if we assigned the right amount of workers and school attendees
++    if (workerss != infra.num_worker) {
++        std::cerr << "Error: Expected " << infra.num_worker << " workers, but found " << workerss << ".\n";
++    }
++    if (school_attendees != infra.num_persons_elementary_schools + infra.num_persons_secondary_schools) {
++        std::cerr << "Error: Expected " << (infra.num_persons_elementary_schools + infra.num_persons_secondary_schools)
++                  << " school attendees, but found " << school_attendees << ".\n";
++    }
++}
++
++void CityBuilder::print_city_summary(const CityConfig& config)
++{
++    auto infra = config.infrastructure();
++
++    std::cout << "\n" << std::string(50, '=') << "\n";
++    std::cout << "     GERMAN CITY SIMULATION SUMMARY\n";
++    std::cout << std::string(50, '=') << "\n\n";
++
++    // Population Overview
++    std::cout << "📊 POPULATION OVERVIEW\n";
++    std::cout << "Total Population: " << config.total_population << "\n";
++    std::cout << "Expected Age Distribution (based on German 2023 census):\n";
++    std::cout << "  • 0-4 years:   " << std::fixed << std::setprecision(1)
++              << (CityParameters::GERMAN_AGE_DISTRIBUTION[0] * 100) << "% ("
++              << static_cast<int>(config.total_population * CityParameters::GERMAN_AGE_DISTRIBUTION[0]) << " people)\n";
++    std::cout << "  • 5-14 years:  " << (CityParameters::GERMAN_AGE_DISTRIBUTION[1] * 100) << "% ("
++              << static_cast<int>(config.total_population * CityParameters::GERMAN_AGE_DISTRIBUTION[1]) << " people)\n";
++    std::cout << "  • 15-34 years: " << (CityParameters::GERMAN_AGE_DISTRIBUTION[2] * 100) << "% ("
++              << static_cast<int>(config.total_population * CityParameters::GERMAN_AGE_DISTRIBUTION[2]) << " people)\n";
++    std::cout << "  • 35-59 years: " << (CityParameters::GERMAN_AGE_DISTRIBUTION[3] * 100) << "% ("
++              << static_cast<int>(config.total_population * CityParameters::GERMAN_AGE_DISTRIBUTION[3]) << " people)\n";
++    std::cout << "  • 60-79 years: " << (CityParameters::GERMAN_AGE_DISTRIBUTION[4] * 100) << "% ("
++              << static_cast<int>(config.total_population * CityParameters::GERMAN_AGE_DISTRIBUTION[4]) << " people)\n";
++    std::cout << "  • 80+ years:   " << (CityParameters::GERMAN_AGE_DISTRIBUTION[5] * 100) << "% ("
++              << static_cast<int>(config.total_population * CityParameters::GERMAN_AGE_DISTRIBUTION[5])
++              << " people)\n\n";
++
++    // Housing
++    std::cout << "🏠 HOUSING\n";
++    int total_households = std::accumulate(infra.num_households_hh_size.begin(), infra.num_households_hh_size.end(), 0);
++    std::cout << "Households: " << total_households << "\n";
++    std::cout << "Average household size: " << std::setprecision(2)
++              << static_cast<double>(config.total_population) / total_households << " people\n";
++    std::cout << "Households by size:\n";
++    for (size_t i = 0; i < infra.num_households_hh_size.size(); ++i) {
++        std::cout << "  • " << (i + 1) << " person: " << infra.num_households_hh_size[i] << "\n";
++    }
++
++    // Employment
++    std::cout << "💼 EMPLOYMENT\n";
++    std::cout << "Workplaces: " << infra.num_workplaces << "\n";
++    std::cout << "Average employees per workplace: " << std::setprecision(1)
++              << static_cast<double>(config.total_population) * CityParameters::InfrastructureRatios::EMPLOYMENT_RATE /
++                     infra.num_workplaces
++              << "\n";
++    std::cout << "Expected employment rate: " << std::setprecision(1)
++              << (CityParameters::InfrastructureRatios::EMPLOYMENT_RATE * 100) << "%\n\n";
++
++    // Education
++    std::cout << "🎓 EDUCATION\n";
++    std::cout << "Elementary schools: " << infra.num_elementary_schools << "\n";
++    std::cout << "Secondary schools: " << infra.num_secondary_schools << "\n";
++    std::cout << "Total schools: " << (infra.num_elementary_schools + infra.num_secondary_schools) << "\n";
++    std::cout << "Students per elementary school: ~" << std::setprecision(0) << infra.num_persons_elementary_schools
++              << "\n";
++    std::cout << "Students per secondary school: ~" << std::setprecision(0) << infra.num_persons_secondary_schools
++              << "\n\n";
++
++    // Healthcare
++    std::cout << "🏥 HEALTHCARE\n";
++    std::cout << "Hospitals: " << infra.num_hospitals << "\n";
++    std::cout << "ICU units: " << infra.num_icus << "\n";
++    std::cout << "People per hospital: " << std::setprecision(0)
++              << static_cast<double>(config.total_population) / infra.num_hospitals << "\n";
++    std::cout << "People per ICU: " << std::setprecision(0)
++              << static_cast<double>(config.total_population) / infra.num_icus << "\n\n";
++
++    // Retail & Services
++    std::cout << "🛒 RETAIL & SERVICES\n";
++    std::cout << "Stores: " << infra.num_stores << "\n";
++    std::cout << "People per store: " << std::setprecision(0)
++              << static_cast<double>(config.total_population) / infra.num_stores << "\n\n";
++
++    // Social & Entertainment
++    std::cout << "🎉 SOCIAL & ENTERTAINMENT\n";
++    std::cout << "Event venues: " << infra.num_events << "\n";
++    std::cout << "People per event venue: " << std::setprecision(0)
++              << static_cast<double>(config.total_population) / infra.num_events << "\n\n";
++
++    // Infrastructure Summary
++    std::cout << "📈 INFRASTRUCTURE DENSITY\n";
++    std::cout << "Total locations: "
++              << (total_households + infra.num_workplaces + infra.num_elementary_schools + infra.num_secondary_schools +
++                  infra.num_hospitals + infra.num_icus + infra.num_stores + infra.num_events)
++              << "\n";
++    std::cout << "Locations per 1000 people: " << std::setprecision(1)
++              << static_cast<double>(total_households + infra.num_workplaces + infra.num_elementary_schools +
++                                     infra.num_secondary_schools + infra.num_hospitals + infra.num_icus +
++                                     infra.num_stores + infra.num_events) *
++                     1000.0 / config.total_population
++              << "\n\n";
++
++    std::cout << "📍 DATA SOURCES\n";
++    std::cout << "• German Federal Statistical Office (Destatis) 2023\n";
++    std::cout << "• German Trade Association (HDE) 2023\n";
++
++    std::cout << "\n" << std::string(50, '=') << "\n\n";
++}
++
++void CityBuilder::save_city_to_file(const CityConfig& config, const std::string& filename)
++{
++    auto infra = config.infrastructure();
++    std::ofstream ofs(filename);
++    if (!ofs) {
++        std::cerr << "Error: Could not open file " << filename << " for writing\n";
++        return;
++    }
++
++    // Write header
++    ofs << "City Simulation Statistics\n";
++    ofs << "=========================\n";
++
++    // Population Statistics
++    ofs << "POPULATION STATISTICS\n";
++    ofs << "--------------------\n";
++    ofs << "total_population," << config.total_population << "\n";
++
++    // Age group distribution
++    ofs << "age_group_0_to_4," << static_cast<int>(config.total_population * CityParameters::GERMAN_AGE_DISTRIBUTION[0])
++        << "\n";
++    ofs << "age_group_5_to_14,"
++        << static_cast<int>(config.total_population * CityParameters::GERMAN_AGE_DISTRIBUTION[1]) << "\n";
++    ofs << "age_group_15_to_34,"
++        << static_cast<int>(config.total_population * CityParameters::GERMAN_AGE_DISTRIBUTION[2]) << "\n";
++    ofs << "age_group_35_to_59,"
++        << static_cast<int>(config.total_population * CityParameters::GERMAN_AGE_DISTRIBUTION[3]) << "\n";
++    ofs << "age_group_60_to_79,"
++        << static_cast<int>(config.total_population * CityParameters::GERMAN_AGE_DISTRIBUTION[4]) << "\n";
++    ofs << "age_group_80_plus,"
++        << static_cast<int>(config.total_population * CityParameters::GERMAN_AGE_DISTRIBUTION[5]) << "\n";
++
++    // Age percentages
++    ofs << "age_percentage_0_to_4," << std::fixed << std::setprecision(2)
++        << (CityParameters::GERMAN_AGE_DISTRIBUTION[0] * 100) << "\n";
++    ofs << "age_percentage_5_to_14," << (CityParameters::GERMAN_AGE_DISTRIBUTION[1] * 100) << "\n";
++    ofs << "age_percentage_15_to_34," << (CityParameters::GERMAN_AGE_DISTRIBUTION[2] * 100) << "\n";
++    ofs << "age_percentage_35_to_59," << (CityParameters::GERMAN_AGE_DISTRIBUTION[3] * 100) << "\n";
++    ofs << "age_percentage_60_to_79," << (CityParameters::GERMAN_AGE_DISTRIBUTION[4] * 100) << "\n";
++    ofs << "age_percentage_80_plus," << (CityParameters::GERMAN_AGE_DISTRIBUTION[5] * 100) << "\n\n";
++
++    // Household Statistics
++    ofs << "HOUSEHOLD STATISTICS\n";
++    ofs << "-------------------\n";
++    int total_households = std::accumulate(infra.num_households_hh_size.begin(), infra.num_households_hh_size.end(), 0);
++    ofs << "total_households," << total_households << "\n";
++    ofs << "average_household_size," << std::setprecision(2)
++        << static_cast<double>(config.total_population) / total_households << "\n";
++
++    // Household size distribution
++    for (size_t i = 0; i < infra.num_households_hh_size.size(); ++i) {
++        ofs << "households_size_" << (i + 1) << "," << infra.num_households_hh_size[i] << "\n";
++        ofs << "households_size_" << (i + 1) << "_percentage," << std::setprecision(2)
++            << (static_cast<double>(infra.num_households_hh_size[i]) / total_households * 100) << "\n";
++    }
++    ofs << "\n";
++
++    // Employment Statistics
++    ofs << "EMPLOYMENT STATISTICS\n";
++    ofs << "--------------------\n";
++    ofs << "num_workplaces," << infra.num_workplaces << "\n";
++    ofs << "num_workers," << infra.num_worker << "\n";
++    ofs << "employment_rate," << std::setprecision(2) << (CityParameters::InfrastructureRatios::EMPLOYMENT_RATE * 100)
++        << "\n";
++    ofs << "average_employees_per_workplace," << std::setprecision(1)
++        << static_cast<double>(infra.num_worker) / infra.num_workplaces << "\n";
++
++    // Calculate workers by age group
++    auto age_vector     = create_age_vector(config.total_population);
++    int workers_15_34   = std::min(age_vector[2], infra.num_worker);
++    int workers_35_59   = std::min(age_vector[3], std::max(0, infra.num_worker - workers_15_34));
++    int workers_60_plus = std::max(0, infra.num_worker - workers_15_34 - workers_35_59);
++
++    ofs << "workers_age_15_34," << workers_15_34 << "\n";
++    ofs << "workers_age_35_59," << workers_35_59 << "\n";
++    ofs << "workers_age_60_plus," << workers_60_plus << "\n\n";
++
++    // Education Statistics
++    ofs << "EDUCATION STATISTICS\n";
++    ofs << "-------------------\n";
++    ofs << "num_elementary_schools," << infra.num_elementary_schools << "\n";
++    ofs << "num_secondary_schools," << infra.num_secondary_schools << "\n";
++    ofs << "total_schools," << (infra.num_elementary_schools + infra.num_secondary_schools) << "\n";
++    ofs << "elementary_school_students," << infra.num_persons_elementary_schools << "\n";
++    ofs << "secondary_school_students," << infra.num_persons_secondary_schools << "\n";
++    ofs << "total_students," << (infra.num_persons_elementary_schools + infra.num_persons_secondary_schools) << "\n";
++    ofs << "students_per_elementary_school," << std::setprecision(1)
++        << static_cast<double>(infra.num_persons_elementary_schools) / infra.num_elementary_schools << "\n";
++    ofs << "students_per_secondary_school," << std::setprecision(1)
++        << static_cast<double>(infra.num_persons_secondary_schools) / infra.num_secondary_schools << "\n";
++    ofs << "school_age_population_5_14," << age_vector[1] << "\n\n";
++
++    // Healthcare Statistics
++    ofs << "HEALTHCARE STATISTICS\n";
++    ofs << "--------------------\n";
++    ofs << "num_hospitals," << infra.num_hospitals << "\n";
++    ofs << "num_icus," << infra.num_icus << "\n";
++    ofs << "people_per_hospital," << std::setprecision(0)
++        << static_cast<double>(config.total_population) / infra.num_hospitals << "\n";
++    ofs << "people_per_icu," << std::setprecision(0) << static_cast<double>(config.total_population) / infra.num_icus
++        << "\n\n";
++
++    // Retail & Services Statistics
++    ofs << "RETAIL & SERVICES STATISTICS\n";
++    ofs << "---------------------------\n";
++    ofs << "num_stores," << infra.num_stores << "\n";
++    ofs << "people_per_store," << std::setprecision(0)
++        << static_cast<double>(config.total_population) / infra.num_stores << "\n";
++    ofs << "shoppers," << (config.total_population - age_vector[0]) << "\n"; // All except 0-4 age group
++    ofs << "shoppers_per_store," << std::setprecision(1)
++        << static_cast<double>(config.total_population - age_vector[0]) / infra.num_stores << "\n\n";
++
++    // Social & Entertainment Statistics
++    ofs << "SOCIAL & ENTERTAINMENT STATISTICS\n";
++    ofs << "--------------------------------\n";
++    ofs << "num_events," << infra.num_events << "\n";
++    ofs << "people_per_event_venue," << std::setprecision(0)
++        << static_cast<double>(config.total_population) / infra.num_events << "\n\n";
++
++    // Infrastructure Density
++    ofs << "INFRASTRUCTURE DENSITY\n";
++    ofs << "---------------------\n";
++    int total_locations = total_households + infra.num_workplaces + infra.num_elementary_schools +
++                          infra.num_secondary_schools + infra.num_hospitals + infra.num_icus + infra.num_stores +
++                          infra.num_events;
++    ofs << "total_locations," << total_locations << "\n";
++    ofs << "locations_per_1000_people," << std::setprecision(1)
++        << static_cast<double>(total_locations) * 1000.0 / config.total_population << "\n";
++    ofs << "households_per_1000_people," << std::setprecision(1)
++        << static_cast<double>(total_households) * 1000.0 / config.total_population << "\n";
++    ofs << "workplaces_per_1000_people," << std::setprecision(1)
++        << static_cast<double>(infra.num_workplaces) * 1000.0 / config.total_population << "\n";
++    ofs << "schools_per_1000_people," << std::setprecision(1)
++        << static_cast<double>(infra.num_elementary_schools + infra.num_secondary_schools) * 1000.0 /
++               config.total_population
++        << "\n\n";
++
++    // Contact Network Potential
++    ofs << "CONTACT NETWORK POTENTIAL\n";
++    ofs << "------------------------\n";
++    ofs << "max_workplace_contacts," << infra.num_worker << "\n";
++    ofs << "max_school_contacts," << (infra.num_persons_elementary_schools + infra.num_persons_secondary_schools)
++        << "\n";
++    ofs << "max_shopping_contacts," << (config.total_population - age_vector[0]) << "\n";
++    ofs << "max_social_event_contacts," << config.total_population << "\n";
++    ofs << "non_working_non_school_population,"
++        << (config.total_population - infra.num_worker - infra.num_persons_elementary_schools -
++            infra.num_persons_secondary_schools)
++        << "\n\n";
++
++    // German Demographic Ratios Used
++    ofs << "GERMAN DEMOGRAPHIC RATIOS USED\n";
++    ofs << "------------------------------\n";
++    ofs << "employment_rate_used," << std::setprecision(3) << CityParameters::InfrastructureRatios::EMPLOYMENT_RATE
++        << "\n";
++
++    // Infrastructure ratios (you may need to expose these from CityParameters)
++    ofs << "households_per_person," << std::setprecision(4)
++        << static_cast<double>(total_households) / config.total_population << "\n";
++    ofs << "workplaces_per_person," << std::setprecision(4)
++        << static_cast<double>(infra.num_workplaces) / config.total_population << "\n";
++    ofs << "stores_per_person," << std::setprecision(4)
++        << static_cast<double>(infra.num_stores) / config.total_population << "\n";
++    ofs << "events_per_person," << std::setprecision(4)
++        << static_cast<double>(infra.num_events) / config.total_population << "\n\n";
++
++    // Summary Statistics for Quick Reference
++    ofs << "SUMMARY STATISTICS\n";
++    ofs << "-----------------\n";
++    ofs << "population_density_category,";
++    if (config.total_population <= 500)
++        ofs << "small_town\n";
++    else if (config.total_population <= 2000)
++        ofs << "medium_town\n";
++    else
++        ofs << "large_town\n";
++
++    ofs << "average_persons_per_household," << std::setprecision(2)
++        << static_cast<double>(config.total_population) / total_households << "\n";
++    ofs << "worker_to_population_ratio," << std::setprecision(3)
++        << static_cast<double>(infra.num_worker) / config.total_population << "\n";
++    ofs << "student_to_population_ratio," << std::setprecision(3)
++        << static_cast<double>(infra.num_persons_elementary_schools + infra.num_persons_secondary_schools) /
++               config.total_population
++        << "\n";
++
++    ofs.close();
++    std::cout << "City statistics saved to " << filename << "\n";
++}
+\ No newline at end of file
+diff --git a/cpp/models/abm/city_builder.h b/cpp/models/abm/city_builder.h
+new file mode 100644
+index 000000000..7200e486f
+--- /dev/null
++++ b/cpp/models/abm/city_builder.h
+@@ -0,0 +1,45 @@
++#pragma once
++#include "memilio/io/result_io.h"
++#include <vector>
++#include <map>
++#include <random>
++#include "abm/model.h"
++#include "abm/location.h"
++#include "abm/person.h"
++#include "city_parameters.h"
++
++// Configuration for representative German city simulation
++struct CityConfig {
++    int total_population = 1;
++
++    // Infrastructure will be calculated based on German demographic data
++    CityParameters::CityInfrastructure infrastructure() const
++    {
++        return CityParameters::CityInfrastructure::calculate(total_population);
++    }
++};
++
++class CityBuilder
++{
++public:
++    static mio::abm::Model build_world(const CityConfig& config, const mio::RandomNumberGenerator& rng,
++                                       size_t num_agegroups = 6);
++    static void print_city_summary(const CityConfig& config);
++    static void save_city_to_file(const CityConfig& config, const std::string& filename);
++
++private:
++    static std::vector<mio::abm::LocationId> create_households(mio::abm::Model& world, int num_households);
++    static std::vector<mio::abm::LocationId> create_workplaces(mio::abm::Model& world, int num_workplaces);
++    static std::vector<mio::abm::LocationId> create_schools(mio::abm::Model& world, int num_schools);
++    static std::vector<mio::abm::LocationId> create_shops(mio::abm::Model& world, int num_shops);
++    static std::vector<mio::abm::LocationId> create_events(mio::abm::Model& world, int num_events);
++    static std::vector<int> create_age_vector(int total_population);
++    static void create_and_assign_people_to_locations(
++        mio::abm::Model& world, const std::vector<mio::abm::LocationId>& households,
++        const std::vector<mio::abm::LocationId>& workplaces, const std::vector<mio::abm::LocationId>& prim_schools,
++        const std::vector<mio::abm::LocationId>& sec_schools, const std::vector<mio::abm::LocationId>& shops,
++        const std::vector<mio::abm::LocationId>& events, const std::vector<mio::abm::LocationId>& hospitals,
++        const std::vector<mio::abm::LocationId>& icus, int total_population, std::vector<int>& hh_per_size,
++        const CityParameters::CityInfrastructure config);
++    static int ageGroupTInt6(mio::AgeGroup age_group);
++};
+\ No newline at end of file
+diff --git a/cpp/models/abm/city_parameters.h b/cpp/models/abm/city_parameters.h
+new file mode 100644
+index 000000000..d0b4b22bf
+--- /dev/null
++++ b/cpp/models/abm/city_parameters.h
+@@ -0,0 +1,209 @@
++#pragma once
++#include <vector>
++#include <map>
++
++/**
++ * @file city_parameters.h
++ * @brief Parameters for building a representative German city
++ * 
++ * This file contains demographic and infrastructure parameters based on German statistics
++ * to create realistic city simulations.
++ * 
++ * Sources:
++ * - German Federal Statistical Office (Destatis) 2024: Population: Germany, reference date, age Code: 12411-0005
++ * - German Federal Statistical Office: Household statistics 2024 Code: 12421-0100
++ */
++
++namespace CityParameters
++{
++
++/**
++ * @brief German age distribution based on 2024 data
++ * Age groups: 0-4, 5-14, 15-34, 35-59, 60-79, 80+
++ */
++const std::vector<double> GERMAN_AGE_DISTRIBUTION = {
++    0.044, // 0-4 years: 4.4%
++    0.094, // 5-14 years: 9.4%
++    0.222, // 15-34 years: 22.2%
++    0.334, // 35-59 years: 33.4%
++    0.233, // 60-79 years: 23.3%
++    0.073 // 80+ years: 7.3%
++};
++
++/**
++ * @brief German household size distribution
++ */
++const std::vector<double> HOUSEHOLD_SIZE_DISTRIBUTION = {
++    0.415, // 1-person households: 41.5%
++    0.342, // 2-person households: 34.2%
++    0.118, // 3-person households: 11.8%
++    0.091, // 4-person households: 9.1%
++    0.034 // 5+ person households: 3.4%
++};
++
++/**
++ * @brief Infrastructure ratios per 1000 people
++ * These ratios are based on German national averages
++ */
++struct InfrastructureRatios {
++    // Employment and workplaces
++    // Source: Destatis labor force statistics 2023
++    static constexpr double EMPLOYMENT_RATE =
++        0.775; // 2024 Erwerbstätigenquoten Altersgruppe 15 bis unter 65 Jahren https://www.destatis.de/DE/Themen/Arbeit/Arbeitsmarkt/Erwerbstaetigkeit/Tabellen/erwerbstaetigenquoten-gebietsstand-geschlecht-altergruppe-mikrozensus.html
++    static constexpr double PEOPLE_PER_WORKPLACE = 10.0; // Average employees per workplace
++
++    // Education
++    // Source: Schüler: Deutschland, Schuljahr, Geschlecht, Schulart, Jahrgangsstufen Code: 21111-0002
++    static constexpr double SCHOOL_RATE =
++        0.105; // OF all persons. This is only for 5-14 years, but we use it for all school-age groups
++    static constexpr double MAX_STUDENTS_PER_ELEMENTARY_SCHOOL =
++        200; // Primary schools Destatis(anzahl schüler) durch anzahl grundschulen(statista)
++    static constexpr double MAX_STUDENTS_PER_SECONDARY_SCHOOL =
++        300; // Secondary schools Destatis(anzahl schüler) durch anzahl gymnasien(statista)
++    static constexpr double RATIO_ELEMENTARY_TO_SECONDARY_SCHOOL =
++        1.65; // There are 1.65 persons in secondary school for each elementary school student
++
++    // Retail and services
++    // Source: HDE retail statistics 2023
++    static constexpr double amount_of_retail_stores_per_1000_people =
++        3.7; // https://de.statista.com/themen/136/einzelhandel-in-deutschland/
++
++    // Social and event locations
++    static constexpr double PEOPLE_PER_EVENT = 15.0;
++};
++
++/**
++ * @brief Calculate city infrastructure based on population size
++ * @param population Total population of the city
++ * @return Infrastructure configuration for the city
++ */
++struct CityInfrastructure {
++    std::vector<int> num_households_hh_size;
++    int num_workplaces;
++    int num_elementary_schools;
++    int num_secondary_schools;
++    int num_hospitals;
++    int num_icus;
++    int num_stores;
++    int num_events;
++    int num_persons_elementary_schools;
++    int num_persons_secondary_schools;
++    int num_worker;
++
++    std::vector<int> calc_household_sizes(int population) const
++    {
++        const int n_bins = HOUSEHOLD_SIZE_DISTRIBUTION.size();
++
++        // 1. Estimate household count based on average household size
++        double avg_household_size = 0.0;
++        for (int i = 0; i < n_bins; ++i)
++            avg_household_size += (i + 1) * HOUSEHOLD_SIZE_DISTRIBUTION[i];
++
++        int estimated_total_households = static_cast<int>(std::round(population / avg_household_size));
++
++        // 2. Calculate raw household numbers per bin
++        std::vector<double> raw_households(n_bins);
++        for (int i = 0; i < n_bins; ++i)
++            raw_households[i] = estimated_total_households * HOUSEHOLD_SIZE_DISTRIBUTION[i];
++
++        // 3. Round and fix totals
++        std::vector<int> households_by_size(n_bins);
++        for (int i = 0; i < n_bins; ++i)
++            households_by_size[i] = static_cast<int>(std::round(raw_households[i]));
++
++        // 4. Ensure population total is correct
++        int total_people = 0;
++        for (int i = 0; i < n_bins; ++i)
++            total_people += households_by_size[i] * (i + 1);
++
++        int diff = population - total_people;
++        // Fix small rounding errors by adding/subtracting people in 5-person households
++        while (diff != 0) {
++            int idx = (diff > 0) ? 4 : 0; // 5-person or 1-person
++            households_by_size[idx] += (diff > 0) ? 1 : -1;
++            diff += (diff > 0) ? -(idx + 1) : (idx + 1);
++        }
++
++        return households_by_size;
++    }
++
++    std::pair<int, int> calc_num_workplaces_and_worker(int population) const
++    {
++        // Calculate number of workplaces based on employment rate and average employees per workplace
++        std::vector<int> age_vector(GERMAN_AGE_DISTRIBUTION.size());
++        for (size_t i = 0; i < CityParameters::GERMAN_AGE_DISTRIBUTION.size(); ++i) {
++            int age_group_population = static_cast<int>(population * CityParameters::GERMAN_AGE_DISTRIBUTION[i]);
++            age_vector.at(i)         = age_group_population;
++        }
++
++        int n_potential_worker = age_vector[2] + age_vector[3] + ((4 / 20) * age_vector[4]);
++        auto n_w = static_cast<int>(std::round(n_potential_worker * InfrastructureRatios::EMPLOYMENT_RATE));
++        int n_wp = static_cast<int>(std::round(n_w / InfrastructureRatios::PEOPLE_PER_WORKPLACE));
++        return std::make_pair(n_wp, n_w);
++    }
++
++    std::tuple<int, int, int, int> calc_num_elem_and_sec_schools(int population) const
++    {
++        // Calculate number of elementary schools based on school rate and max students per school
++        int total_students          = static_cast<int>(population * InfrastructureRatios::SCHOOL_RATE);
++        int num_elementary_students = static_cast<int>(
++            std::round(total_students / (1.0 + InfrastructureRatios::RATIO_ELEMENTARY_TO_SECONDARY_SCHOOL)));
++        int num_secondary_students = total_students - num_elementary_students;
++        return std::make_tuple(
++            static_cast<int>(static_cast<int>(
++                std::ceil(num_elementary_students / InfrastructureRatios::MAX_STUDENTS_PER_ELEMENTARY_SCHOOL))),
++            static_cast<int>(static_cast<int>(
++                std::ceil(num_secondary_students / InfrastructureRatios::MAX_STUDENTS_PER_SECONDARY_SCHOOL))),
++            num_elementary_students, num_secondary_students);
++    }
++
++    int calc_stores(int population) const
++    {
++        // Calculate number of retail stores based on average stores per 1000 people
++        int n_stores = static_cast<int>(
++            std::ceil(population * InfrastructureRatios::amount_of_retail_stores_per_1000_people / 1000.0));
++        return n_stores;
++    }
++
++    int calc_num_events(int population) const
++    {
++        // Calculate number of events based on people per event and chance to attend
++        int n_events = static_cast<int>(std::ceil(population / InfrastructureRatios::PEOPLE_PER_EVENT));
++        return n_events;
++    }
++
++    static CityInfrastructure calculate(int population)
++    {
++        CityInfrastructure infra;
++
++        // Calculate household sizes
++        infra.num_households_hh_size = infra.calc_household_sizes(population);
++
++        // Calculate workplaces
++        auto [num_workplaces, num_worker] = infra.calc_num_workplaces_and_worker(population);
++        infra.num_workplaces              = num_workplaces;
++        infra.num_worker                  = num_worker;
++
++        // Calculate schools
++        auto [num_elem_schools, num_sec_schools, num_elem_students, num_sec_students] =
++            infra.calc_num_elem_and_sec_schools(population);
++        infra.num_persons_elementary_schools = num_elem_students;
++        infra.num_persons_secondary_schools  = num_sec_students;
++        infra.num_elementary_schools         = num_elem_schools;
++        infra.num_secondary_schools          = num_sec_schools;
++
++        // Calculate hospitals and ICUs
++        infra.num_hospitals = 1; // 1 hospital per 100,000 people
++        infra.num_icus      = 1; //
++
++        // Calculate stores
++        infra.num_stores = infra.calc_stores(population);
++
++        // Calculate events
++        infra.num_events = infra.calc_num_events(population);
++
++        return infra;
++    }
++};
++
++} // namespace CityParameters
+diff --git a/cpp/models/abm/common_abm_loggers.h b/cpp/models/abm/common_abm_loggers.h
+index 8458bd2fb..08cd706c8 100644
+--- a/cpp/models/abm/common_abm_loggers.h
++++ b/cpp/models/abm/common_abm_loggers.h
+@@ -153,7 +153,7 @@ struct LogDataForMobility : mio::LogAlways {
+     static Type log(const mio::abm::Simulation<>& sim)
+     {
+         Type mobility_data{};
+-        for (Person p : sim.get_model().get_persons()) {
++        for (const Person& p : sim.get_model().get_persons()) {
+             mobility_data.push_back(
+                 std::make_tuple(p.get_id(), p.get_location(), sim.get_time(), p.get_last_transport_mode(),
+                                 guess_activity_type(p.get_location_type()), p.get_infection_state(sim.get_time())));
+@@ -166,7 +166,8 @@ struct LogDataForMobility : mio::LogAlways {
+ * @brief Logger to log the TimeSeries of the number of Person%s in an #InfectionState.
+ */
+ struct LogInfectionState : mio::LogAlways {
+-    using Type = std::pair<mio::abm::TimePoint, Eigen::VectorX<ScalarType>>;
++    using Type = std::pair<mio::abm::TimePoint, Eigen::VectorXd>;
++
+     /** 
+      * @brief Log the TimeSeries of the number of Person%s in an #InfectionState.
+      * @param[in] sim The simulation of the abm.
+@@ -174,15 +175,15 @@ struct LogInfectionState : mio::LogAlways {
+      */
+     static Type log(const mio::abm::Simulation<>& sim)
+     {
++        Eigen::VectorXd sum = Eigen::VectorXd::Zero(Eigen::Index(mio::abm::InfectionState::Count));
++        auto curr_time      = sim.get_time();
+ 
+-        Eigen::VectorX<ScalarType> sum =
+-            Eigen::VectorX<ScalarType>::Zero(Eigen::Index(mio::abm::InfectionState::Count));
+-        auto curr_time = sim.get_time();
+-        PRAGMA_OMP(for)
+-        for (auto& location : sim.get_model().get_locations()) {
++        // Otherwise log accordingly
++        for (auto&& person : sim.get_model().get_persons()) {
+             for (uint32_t inf_state = 0; inf_state < (int)mio::abm::InfectionState::Count; inf_state++) {
+-                sum[inf_state] += sim.get_model().get_subpopulation(location.get_id(), curr_time,
+-                                                                    mio::abm::InfectionState(inf_state));
++                if (person.get_infection_state(curr_time) == mio::abm::InfectionState(inf_state)) {
++                    sum[inf_state] += 1;
++                }
+             }
+         }
+         return std::make_pair(curr_time, sum);
+diff --git a/cpp/models/abm/infection.cpp b/cpp/models/abm/infection.cpp
+index 6d80d144a..70a032253 100644
+--- a/cpp/models/abm/infection.cpp
++++ b/cpp/models/abm/infection.cpp
+@@ -21,6 +21,8 @@
+ #include "abm/infection.h"
+ #include "abm/parameters.h"
+ #include "memilio/utils/compiler_diagnostics.h"
++#include <cassert>
++#include <iterator>
+ #include <math.h>
+ 
+ namespace mio
+diff --git a/cpp/models/abm/infection.h b/cpp/models/abm/infection.h
+index d26a619bb..e97fb227e 100644
+--- a/cpp/models/abm/infection.h
++++ b/cpp/models/abm/infection.h
+@@ -27,6 +27,7 @@
+ #include "abm/virus_variant.h"
+ #include "abm/parameters.h"
+ 
++#include <cstddef>
+ #include <vector>
+ 
+ namespace mio
+@@ -199,6 +200,7 @@ private:
+         m_log_norm_beta; ///< Parameters for the infectivity mapping, which is modelled through an invlogit function.
+     ScalarType m_individual_virus_shed_factor; ///< Individual virus shed factor.
+     bool m_detected; ///< Whether an Infection is detected or not.
++    mutable size_t m_last_lookup_index{0}; ///< Store index of last accessed
+ };
+ 
+ } // namespace abm
+diff --git a/cpp/models/abm/mobility_rules.cpp b/cpp/models/abm/mobility_rules.cpp
+index b86855d7d..7048ce8a1 100644
+--- a/cpp/models/abm/mobility_rules.cpp
++++ b/cpp/models/abm/mobility_rules.cpp
+@@ -49,7 +49,8 @@ LocationType go_to_school(PersonalRandomNumberGenerator& /*rng*/, const Person&
+ {
+     auto current_loc = person.get_location_type();
+ 
+-    if (current_loc == LocationType::Home && t < params.get<LockdownDate>() && t.day_of_week() < 5 &&
++    if (person.get_assigned_location(LocationType::School) != mio::abm::LocationId::invalid_id() &&
++        current_loc == LocationType::Home && t < params.get<LockdownDate>() && t.day_of_week() < 5 &&
+         person.get_go_to_school_time(params) >= t.time_since_midnight() &&
+         person.get_go_to_school_time(params) < t.time_since_midnight() + dt &&
+         params.get<AgeGroupGotoSchool>()[person.get_age()] && person.goes_to_school(t, params) &&
+@@ -68,7 +69,8 @@ LocationType go_to_work(PersonalRandomNumberGenerator& /*rng*/, const Person& pe
+ {
+     auto current_loc = person.get_location_type();
+ 
+-    if (current_loc == LocationType::Home && t < params.get<LockdownDate>() &&
++    if (person.get_assigned_location(LocationType::Work) != mio::abm::LocationId::invalid_id() &&
++        current_loc == LocationType::Home && t < params.get<LockdownDate>() &&
+         params.get<AgeGroupGotoWork>()[person.get_age()] && t.day_of_week() < 5 &&
+         t.time_since_midnight() + dt > person.get_go_to_work_time(params) &&
+         t.time_since_midnight() <= person.get_go_to_work_time(params) && person.goes_to_work(t, params) &&
+@@ -87,7 +89,8 @@ LocationType go_to_shop(PersonalRandomNumberGenerator& rng, const Person& person
+ {
+     auto current_loc = person.get_location_type();
+     //leave
+-    if (t.day_of_week() < 6 && t.hour_of_day() > 7 && t.hour_of_day() < 22 && current_loc == LocationType::Home &&
++    if (person.get_assigned_location(LocationType::BasicsShop) != mio::abm::LocationId::invalid_id() &&
++        t.day_of_week() < 6 && t.hour_of_day() > 7 && t.hour_of_day() < 22 && current_loc == LocationType::Home &&
+         !person.is_in_quarantine(t, params)) {
+         return random_transition(rng, current_loc, dt,
+                                  {{LocationType::BasicsShop, params.get<BasicShoppingRate>()[person.get_age()]}});
+diff --git a/cpp/models/abm/model.cpp b/cpp/models/abm/model.cpp
+index 04aeaa8b4..4cee74551 100755
+--- a/cpp/models/abm/model.cpp
++++ b/cpp/models/abm/model.cpp
+@@ -162,7 +162,7 @@ void Model::perform_mobility(TimePoint t, TimeSpan dt)
+                     (has_locations({LocationType::ICU}) && try_mobility_rule(&go_to_icu)) ||
+                     (has_locations({LocationType::School, LocationType::Home}) && try_mobility_rule(&go_to_school)) ||
+                     (has_locations({LocationType::Work, LocationType::Home}) && try_mobility_rule(&go_to_work)) ||
+-                    (has_locations({LocationType::BasicsShop, LocationType::Home}) && try_mobility_rule(&go_to_shop)) ||
++                    // (has_locations({LocationType::BasicsShop, LocationType::Home}) && try_mobility_rule(&go_to_shop)) ||
+                     (has_locations({LocationType::SocialEvent, LocationType::Home}) &&
+                      try_mobility_rule(&go_to_event)) ||
+                     (has_locations({LocationType::Home}) && try_mobility_rule(&go_to_quarantine));
+diff --git a/cpp/models/abm/model.h b/cpp/models/abm/model.h
+index 1ec72e32d..a8049a158 100644
+--- a/cpp/models/abm/model.h
++++ b/cpp/models/abm/model.h
+@@ -20,6 +20,7 @@
+ #ifndef MIO_ABM_MODEL_H
+ #define MIO_ABM_MODEL_H
+ 
++#include "abm/infection_state.h"
+ #include "abm/model_functions.h"
+ #include "abm/location_type.h"
+ #include "abm/mobility_data.h"
+@@ -61,6 +62,7 @@ public:
+     using MobilityRuleType        = LocationType (*)(PersonalRandomNumberGenerator&, const Person&, TimePoint, TimeSpan,
+                                               const Parameters&);
+ 
++    using Compartments = mio::abm::InfectionState;
+     /**
+      * @brief Create a Model.
+      * @param[in] num_agegroups The number of AgeGroup%s in the simulated Model. Must be less than MAX_NUM_AGE_GROUPS.
+diff --git a/cpp/models/abm/model_functions.cpp b/cpp/models/abm/model_functions.cpp
+index 7180cffa1..88e8ad69c 100644
+--- a/cpp/models/abm/model_functions.cpp
++++ b/cpp/models/abm/model_functions.cpp
+@@ -148,7 +148,7 @@ void normalize_exposure_contribution(ContactExposureRates& local_contact_exposur
+     assert(local_population_by_age.size<CellIndex>() == local_contact_exposure.size<CellIndex>());
+     assert(local_contact_exposure.size<VirusVariant>() == VirusVariant::Count);
+ 
+-    for (auto index : make_index_range(local_contact_exposure.size())) {
++    for (const auto index : make_index_range(local_contact_exposure.size())) {
+         auto age_index = reduce_index<Index<CellIndex, AgeGroup>>(index);
+         if (local_population_by_age[age_index] > 0) {
+             // this instruction is not and does not need to be atomic
+diff --git a/cpp/models/abm/parameter_setter.cpp b/cpp/models/abm/parameter_setter.cpp
+new file mode 100644
+index 000000000..990129e39
+--- /dev/null
++++ b/cpp/models/abm/parameter_setter.cpp
+@@ -0,0 +1,351 @@
++#include "parameter_setter.h"
++#include <cmath>
++
++// Define age group constants
++const mio::AgeGroup age_group_0_to_4{0};
++const mio::AgeGroup age_group_5_to_14{1};
++const mio::AgeGroup age_group_15_to_34{2};
++const mio::AgeGroup age_group_35_to_59{3};
++const mio::AgeGroup age_group_60_to_79{4};
++const mio::AgeGroup age_group_80_plus{5};
++
++std::pair<double, double> get_my_and_sigma(std::pair<double, double> mean_and_std)
++{
++    auto mean    = mean_and_std.first;
++    auto stddev  = mean_and_std.second;
++    double my    = log(mean * mean / sqrt(mean * mean + stddev * stddev));
++    double sigma = sqrt(log(1 + stddev * stddev / (mean * mean)));
++    return {my, sigma};
++}
++
++void set_parameters(mio::abm::Parameters& params)
++{
++    auto incubation_period_my_sigma = get_my_and_sigma({4.5, 1.5});
++    params.get<mio::abm::TimeExposedToNoSymptoms>() =
++        mio::ParameterDistributionLogNormal{incubation_period_my_sigma.first, incubation_period_my_sigma.second};
++
++    auto InfectedNoSymptoms_to_symptoms_my_sigma             = get_my_and_sigma({1.1, 0.9});
++    params.get<mio::abm::TimeInfectedNoSymptomsToSymptoms>() = mio::ParameterDistributionLogNormal{
++        InfectedNoSymptoms_to_symptoms_my_sigma.first, InfectedNoSymptoms_to_symptoms_my_sigma.second};
++
++    auto TimeInfectedNoSymptomsToRecovered_my_sigma           = get_my_and_sigma({8.0, 2.0});
++    params.get<mio::abm::TimeInfectedNoSymptomsToRecovered>() = mio::ParameterDistributionLogNormal{
++        TimeInfectedNoSymptomsToRecovered_my_sigma.first, TimeInfectedNoSymptomsToRecovered_my_sigma.second};
++
++    auto TimeInfectedSymptomsToSevere_my_sigma           = get_my_and_sigma({6.6, 4.9});
++    params.get<mio::abm::TimeInfectedSymptomsToSevere>() = mio::ParameterDistributionLogNormal{
++        TimeInfectedSymptomsToSevere_my_sigma.first, TimeInfectedSymptomsToSevere_my_sigma.second};
++
++    auto TimeInfectedSymptomsToRecovered_my_sigma           = get_my_and_sigma({8.0, 2.0});
++    params.get<mio::abm::TimeInfectedSymptomsToRecovered>() = mio::ParameterDistributionLogNormal{
++        TimeInfectedSymptomsToRecovered_my_sigma.first, TimeInfectedSymptomsToRecovered_my_sigma.second};
++
++    auto TimeInfectedSevereToCritical_my_sigma           = get_my_and_sigma({1.5, 2.0});
++    params.get<mio::abm::TimeInfectedSevereToCritical>() = mio::ParameterDistributionLogNormal{
++        TimeInfectedSevereToCritical_my_sigma.first, TimeInfectedSevereToCritical_my_sigma.second};
++
++    auto TimeInfectedSevereToRecovered_my_sigma           = get_my_and_sigma({18.1, 6.3});
++    params.get<mio::abm::TimeInfectedSevereToRecovered>() = mio::ParameterDistributionLogNormal{
++        TimeInfectedSevereToRecovered_my_sigma.first, TimeInfectedSevereToRecovered_my_sigma.second};
++
++    auto TimeInfectedCriticalToDead_my_sigma           = get_my_and_sigma({10.7, 4.8});
++    params.get<mio::abm::TimeInfectedCriticalToDead>() = mio::ParameterDistributionLogNormal{
++        TimeInfectedCriticalToDead_my_sigma.first, TimeInfectedCriticalToDead_my_sigma.second};
++
++    auto TimeInfectedCriticalToRecovered_my_sigma           = get_my_and_sigma({18.1, 6.3});
++    params.get<mio::abm::TimeInfectedCriticalToRecovered>() = mio::ParameterDistributionLogNormal{
++        TimeInfectedCriticalToRecovered_my_sigma.first, TimeInfectedCriticalToRecovered_my_sigma.second};
++
++    // Set percentage parameters
++    params.get<mio::abm::SymptomsPerInfectedNoSymptoms>()[{mio::abm::VirusVariant::Wildtype, age_group_0_to_4}]  = 0.50;
++    params.get<mio::abm::SymptomsPerInfectedNoSymptoms>()[{mio::abm::VirusVariant::Wildtype, age_group_5_to_14}] = 0.55;
++    params.get<mio::abm::SymptomsPerInfectedNoSymptoms>()[{mio::abm::VirusVariant::Wildtype, age_group_15_to_34}] =
++        0.60;
++    params.get<mio::abm::SymptomsPerInfectedNoSymptoms>()[{mio::abm::VirusVariant::Wildtype, age_group_35_to_59}] =
++        0.70;
++    params.get<mio::abm::SymptomsPerInfectedNoSymptoms>()[{mio::abm::VirusVariant::Wildtype, age_group_60_to_79}] =
++        0.83;
++    params.get<mio::abm::SymptomsPerInfectedNoSymptoms>()[{mio::abm::VirusVariant::Wildtype, age_group_80_plus}] = 0.90;
++
++    params.get<mio::abm::SeverePerInfectedSymptoms>()[{mio::abm::VirusVariant::Wildtype, age_group_0_to_4}]   = 0.02;
++    params.get<mio::abm::SeverePerInfectedSymptoms>()[{mio::abm::VirusVariant::Wildtype, age_group_5_to_14}]  = 0.03;
++    params.get<mio::abm::SeverePerInfectedSymptoms>()[{mio::abm::VirusVariant::Wildtype, age_group_15_to_34}] = 0.04;
++    params.get<mio::abm::SeverePerInfectedSymptoms>()[{mio::abm::VirusVariant::Wildtype, age_group_35_to_59}] = 0.07;
++    params.get<mio::abm::SeverePerInfectedSymptoms>()[{mio::abm::VirusVariant::Wildtype, age_group_60_to_79}] = 0.17;
++    params.get<mio::abm::SeverePerInfectedSymptoms>()[{mio::abm::VirusVariant::Wildtype, age_group_80_plus}]  = 0.24;
++
++    params.get<mio::abm::CriticalPerInfectedSevere>()[{mio::abm::VirusVariant::Wildtype, age_group_0_to_4}]   = 0.1;
++    params.get<mio::abm::CriticalPerInfectedSevere>()[{mio::abm::VirusVariant::Wildtype, age_group_5_to_14}]  = 0.11;
++    params.get<mio::abm::CriticalPerInfectedSevere>()[{mio::abm::VirusVariant::Wildtype, age_group_15_to_34}] = 0.12;
++    params.get<mio::abm::CriticalPerInfectedSevere>()[{mio::abm::VirusVariant::Wildtype, age_group_35_to_59}] = 0.14;
++    params.get<mio::abm::CriticalPerInfectedSevere>()[{mio::abm::VirusVariant::Wildtype, age_group_60_to_79}] = 0.33;
++    params.get<mio::abm::CriticalPerInfectedSevere>()[{mio::abm::VirusVariant::Wildtype, age_group_80_plus}]  = 0.62;
++
++    params.get<mio::abm::DeathsPerInfectedCritical>()[{mio::abm::VirusVariant::Wildtype, age_group_0_to_4}]   = 0.12;
++    params.get<mio::abm::DeathsPerInfectedCritical>()[{mio::abm::VirusVariant::Wildtype, age_group_5_to_14}]  = 0.13;
++    params.get<mio::abm::DeathsPerInfectedCritical>()[{mio::abm::VirusVariant::Wildtype, age_group_15_to_34}] = 0.15;
++    params.get<mio::abm::DeathsPerInfectedCritical>()[{mio::abm::VirusVariant::Wildtype, age_group_35_to_59}] = 0.26;
++    params.get<mio::abm::DeathsPerInfectedCritical>()[{mio::abm::VirusVariant::Wildtype, age_group_60_to_79}] = 0.40;
++    params.get<mio::abm::DeathsPerInfectedCritical>()[{mio::abm::VirusVariant::Wildtype, age_group_80_plus}]  = 0.48;
++
++    // Set infection parameters
++    params.get<mio::abm::AerosolTransmissionRates>() = 0.0;
++}
++
++void set_local_parameters(mio::abm::Model& world)
++{
++    const int n_age_groups = (int)world.parameters.get_num_groups();
++
++    // setting this up in matrix-form would be much nicer,
++    // but we somehow can't construct Eigen object with initializer lists
++    /* baseline_home
++        0.4413 0.4504 1.2383 0.8033 0.0494 0.0017
++        0.0485 0.7616 0.6532 1.1614 0.0256 0.0013
++        0.1800 0.1795 0.8806 0.6413 0.0429 0.0032
++        0.0495 0.2639 0.5189 0.8277 0.0679 0.0014
++        0.0087 0.0394 0.1417 0.3834 0.7064 0.0447
++        0.0292 0.0648 0.1248 0.4179 0.3497 0.1544
++    */
++    mio::CustomIndexArray<ScalarType, mio::AgeGroup, mio::AgeGroup> contacts_home(
++        {mio::AgeGroup(n_age_groups), mio::AgeGroup(n_age_groups)}, 0.);
++    contacts_home[{age_group_0_to_4, age_group_0_to_4}]     = 0.4413;
++    contacts_home[{age_group_0_to_4, age_group_5_to_14}]    = 0.0504;
++    contacts_home[{age_group_0_to_4, age_group_15_to_34}]   = 1.2383;
++    contacts_home[{age_group_0_to_4, age_group_35_to_59}]   = 0.8033;
++    contacts_home[{age_group_0_to_4, age_group_60_to_79}]   = 0.0494;
++    contacts_home[{age_group_0_to_4, age_group_80_plus}]    = 0.0017;
++    contacts_home[{age_group_5_to_14, age_group_0_to_4}]    = 0.0485;
++    contacts_home[{age_group_5_to_14, age_group_5_to_14}]   = 0.7616;
++    contacts_home[{age_group_5_to_14, age_group_15_to_34}]  = 0.6532;
++    contacts_home[{age_group_5_to_14, age_group_35_to_59}]  = 1.1614;
++    contacts_home[{age_group_5_to_14, age_group_60_to_79}]  = 0.0256;
++    contacts_home[{age_group_5_to_14, age_group_80_plus}]   = 0.0013;
++    contacts_home[{age_group_15_to_34, age_group_0_to_4}]   = 0.1800;
++    contacts_home[{age_group_15_to_34, age_group_5_to_14}]  = 0.1795;
++    contacts_home[{age_group_15_to_34, age_group_15_to_34}] = 0.8806;
++    contacts_home[{age_group_15_to_34, age_group_35_to_59}] = 0.6413;
++    contacts_home[{age_group_15_to_34, age_group_60_to_79}] = 0.0429;
++    contacts_home[{age_group_15_to_34, age_group_80_plus}]  = 0.0032;
++    contacts_home[{age_group_35_to_59, age_group_0_to_4}]   = 0.0495;
++    contacts_home[{age_group_35_to_59, age_group_5_to_14}]  = 0.2639;
++    contacts_home[{age_group_35_to_59, age_group_15_to_34}] = 0.5189;
++    contacts_home[{age_group_35_to_59, age_group_35_to_59}] = 0.8277;
++    contacts_home[{age_group_35_to_59, age_group_60_to_79}] = 0.0679;
++    contacts_home[{age_group_35_to_59, age_group_80_plus}]  = 0.0014;
++    contacts_home[{age_group_60_to_79, age_group_0_to_4}]   = 0.0087;
++    contacts_home[{age_group_60_to_79, age_group_5_to_14}]  = 0.0394;
++    contacts_home[{age_group_60_to_79, age_group_15_to_34}] = 0.1417;
++    contacts_home[{age_group_60_to_79, age_group_35_to_59}] = 0.3834;
++    contacts_home[{age_group_60_to_79, age_group_60_to_79}] = 0.7064;
++    contacts_home[{age_group_60_to_79, age_group_80_plus}]  = 0.0447;
++    contacts_home[{age_group_80_plus, age_group_0_to_4}]    = 0.0292;
++    contacts_home[{age_group_80_plus, age_group_5_to_14}]   = 0.0648;
++    contacts_home[{age_group_80_plus, age_group_15_to_34}]  = 0.1248;
++    contacts_home[{age_group_80_plus, age_group_35_to_59}]  = 0.4179;
++    contacts_home[{age_group_80_plus, age_group_60_to_79}]  = 0.3497;
++    contacts_home[{age_group_80_plus, age_group_80_plus}]   = 0.1544;
++
++    /* baseline_school
++        1.1165 0.2741 0.2235 0.1028 0.0007 0.0000
++        0.1627 1.9412 0.2431 0.1780 0.0130 0.0000
++        0.0148 0.1646 1.1266 0.0923 0.0074 0.0000
++        0.0367 0.1843 0.3265 0.0502 0.0021 0.0005
++        0.0004 0.0370 0.0115 0.0014 0.0039 0.0000
++        0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
++    */
++    mio::CustomIndexArray<ScalarType, mio::AgeGroup, mio::AgeGroup> contacts_school(
++        {mio::AgeGroup(n_age_groups), mio::AgeGroup(n_age_groups)}, 0.);
++    contacts_school[{age_group_0_to_4, age_group_0_to_4}]     = 1.1165;
++    contacts_school[{age_group_0_to_4, age_group_5_to_14}]    = 0.2741;
++    contacts_school[{age_group_0_to_4, age_group_15_to_34}]   = 0.2235;
++    contacts_school[{age_group_0_to_4, age_group_35_to_59}]   = 0.1028;
++    contacts_school[{age_group_0_to_4, age_group_60_to_79}]   = 0.0007;
++    contacts_school[{age_group_0_to_4, age_group_80_plus}]    = 0.0000;
++    contacts_school[{age_group_5_to_14, age_group_0_to_4}]    = 0.1627;
++    contacts_school[{age_group_5_to_14, age_group_5_to_14}]   = 1.9412;
++    contacts_school[{age_group_5_to_14, age_group_15_to_34}]  = 0.2431;
++    contacts_school[{age_group_5_to_14, age_group_35_to_59}]  = 0.1780;
++    contacts_school[{age_group_5_to_14, age_group_60_to_79}]  = 0.0130;
++    contacts_school[{age_group_5_to_14, age_group_80_plus}]   = 0.0000;
++    contacts_school[{age_group_15_to_34, age_group_0_to_4}]   = 0.0148;
++    contacts_school[{age_group_15_to_34, age_group_5_to_14}]  = 0.1646;
++    contacts_school[{age_group_15_to_34, age_group_15_to_34}] = 1.1266;
++    contacts_school[{age_group_15_to_34, age_group_35_to_59}] = 0.0923;
++    contacts_school[{age_group_15_to_34, age_group_60_to_79}] = 0.0074;
++    contacts_school[{age_group_15_to_34, age_group_80_plus}]  = 0.0000;
++    contacts_school[{age_group_35_to_59, age_group_0_to_4}]   = 0.0367;
++    contacts_school[{age_group_35_to_59, age_group_5_to_14}]  = 0.1843;
++    contacts_school[{age_group_35_to_59, age_group_15_to_34}] = 0.3265;
++    contacts_school[{age_group_35_to_59, age_group_35_to_59}] = 0.0502;
++    contacts_school[{age_group_35_to_59, age_group_60_to_79}] = 0.0021;
++    contacts_school[{age_group_35_to_59, age_group_80_plus}]  = 0.0005;
++    contacts_school[{age_group_60_to_79, age_group_0_to_4}]   = 0.0004;
++    contacts_school[{age_group_60_to_79, age_group_5_to_14}]  = 0.0370;
++    contacts_school[{age_group_60_to_79, age_group_15_to_34}] = 0.0115;
++    contacts_school[{age_group_60_to_79, age_group_35_to_59}] = 0.0014;
++    contacts_school[{age_group_60_to_79, age_group_60_to_79}] = 0.0039;
++    contacts_school[{age_group_60_to_79, age_group_80_plus}]  = 0.0000;
++    contacts_school[{age_group_80_plus, age_group_0_to_4}]    = 0.0000;
++    contacts_school[{age_group_80_plus, age_group_5_to_14}]   = 0.0000;
++    contacts_school[{age_group_80_plus, age_group_15_to_34}]  = 0.0000;
++    contacts_school[{age_group_80_plus, age_group_35_to_59}]  = 0.0000;
++    contacts_school[{age_group_80_plus, age_group_60_to_79}]  = 0.0000;
++    contacts_school[{age_group_80_plus, age_group_80_plus}]   = 0.0000;
++
++    /* baseline_work
++        0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
++        0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
++        0.0000 0.0127 1.7570 1.6050 0.0133 0.0000
++        0.0000 0.0020 1.0311 2.3166 0.0098 0.0000
++        0.0000 0.0002 0.0194 0.0325 0.0003 0.0000
++        0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
++    */
++    mio::CustomIndexArray<ScalarType, mio::AgeGroup, mio::AgeGroup> contacts_work(
++        {mio::AgeGroup(n_age_groups), mio::AgeGroup(n_age_groups)}, 0.);
++    contacts_work[{age_group_0_to_4, age_group_0_to_4}]     = 0.0000;
++    contacts_work[{age_group_0_to_4, age_group_5_to_14}]    = 0.0000;
++    contacts_work[{age_group_0_to_4, age_group_15_to_34}]   = 0.0000;
++    contacts_work[{age_group_0_to_4, age_group_35_to_59}]   = 0.0000;
++    contacts_work[{age_group_0_to_4, age_group_60_to_79}]   = 0.0000;
++    contacts_work[{age_group_0_to_4, age_group_80_plus}]    = 0.0000;
++    contacts_work[{age_group_5_to_14, age_group_0_to_4}]    = 0.0000;
++    contacts_work[{age_group_5_to_14, age_group_5_to_14}]   = 0.0000;
++    contacts_work[{age_group_5_to_14, age_group_15_to_34}]  = 0.0000;
++    contacts_work[{age_group_5_to_14, age_group_35_to_59}]  = 0.0000;
++    contacts_work[{age_group_5_to_14, age_group_60_to_79}]  = 0.0000;
++    contacts_work[{age_group_5_to_14, age_group_80_plus}]   = 0.0000;
++    contacts_work[{age_group_15_to_34, age_group_0_to_4}]   = 0.0000;
++    contacts_work[{age_group_15_to_34, age_group_5_to_14}]  = 0.0127;
++    contacts_work[{age_group_15_to_34, age_group_15_to_34}] = 1.7570;
++    contacts_work[{age_group_15_to_34, age_group_35_to_59}] = 1.6050;
++    contacts_work[{age_group_15_to_34, age_group_60_to_79}] = 0.0133;
++    contacts_work[{age_group_15_to_34, age_group_80_plus}]  = 0.0000;
++    contacts_work[{age_group_35_to_59, age_group_0_to_4}]   = 0.0000;
++    contacts_work[{age_group_35_to_59, age_group_5_to_14}]  = 0.0020;
++    contacts_work[{age_group_35_to_59, age_group_15_to_34}] = 1.0311;
++    contacts_work[{age_group_35_to_59, age_group_35_to_59}] = 2.3166;
++    contacts_work[{age_group_35_to_59, age_group_60_to_79}] = 0.0098;
++    contacts_work[{age_group_35_to_59, age_group_80_plus}]  = 0.0000;
++    contacts_work[{age_group_60_to_79, age_group_0_to_4}]   = 0.0000;
++    contacts_work[{age_group_60_to_79, age_group_5_to_14}]  = 0.0002;
++    contacts_work[{age_group_60_to_79, age_group_15_to_34}] = 0.0194;
++    contacts_work[{age_group_60_to_79, age_group_35_to_59}] = 0.0325;
++    contacts_work[{age_group_60_to_79, age_group_60_to_79}] = 0.0003;
++    contacts_work[{age_group_60_to_79, age_group_80_plus}]  = 0.0000;
++    contacts_work[{age_group_80_plus, age_group_0_to_4}]    = 0.0000;
++    contacts_work[{age_group_80_plus, age_group_5_to_14}]   = 0.0000;
++    contacts_work[{age_group_80_plus, age_group_15_to_34}]  = 0.0000;
++    contacts_work[{age_group_80_plus, age_group_35_to_59}]  = 0.0000;
++    contacts_work[{age_group_80_plus, age_group_60_to_79}]  = 0.0000;
++    contacts_work[{age_group_80_plus, age_group_80_plus}]   = 0.0000;
++
++    /* baseline_other
++        0.5170 0.3997 0.7957 0.9958 0.3239 0.0428
++        0.0632 0.9121 0.3254 0.4731 0.2355 0.0148
++        0.0336 0.1604 1.7529 0.8622 0.1440 0.0077
++        0.0204 0.1444 0.5738 1.2127 0.3433 0.0178
++        0.0371 0.0393 0.4171 0.9666 0.7495 0.0257
++        0.0791 0.0800 0.3480 0.5588 0.2769 0.0180
++    */
++    mio::CustomIndexArray<ScalarType, mio::AgeGroup, mio::AgeGroup> contacts_other(
++        {mio::AgeGroup(n_age_groups), mio::AgeGroup(n_age_groups)}, 0.);
++    contacts_other[{age_group_0_to_4, age_group_0_to_4}]     = 0.5170;
++    contacts_other[{age_group_0_to_4, age_group_5_to_14}]    = 0.3997;
++    contacts_other[{age_group_0_to_4, age_group_15_to_34}]   = 0.7957;
++    contacts_other[{age_group_0_to_4, age_group_35_to_59}]   = 0.9958;
++    contacts_other[{age_group_0_to_4, age_group_60_to_79}]   = 0.3239;
++    contacts_other[{age_group_0_to_4, age_group_80_plus}]    = 0.0428;
++    contacts_other[{age_group_5_to_14, age_group_0_to_4}]    = 0.0632;
++    contacts_other[{age_group_5_to_14, age_group_5_to_14}]   = 0.9121;
++    contacts_other[{age_group_5_to_14, age_group_15_to_34}]  = 0.3254;
++    contacts_other[{age_group_5_to_14, age_group_35_to_59}]  = 0.4731;
++    contacts_other[{age_group_5_to_14, age_group_60_to_79}]  = 0.2355;
++    contacts_other[{age_group_5_to_14, age_group_80_plus}]   = 0.0148;
++    contacts_other[{age_group_15_to_34, age_group_0_to_4}]   = 0.0336;
++    contacts_other[{age_group_15_to_34, age_group_5_to_14}]  = 0.1604;
++    contacts_other[{age_group_15_to_34, age_group_15_to_34}] = 1.7529;
++    contacts_other[{age_group_15_to_34, age_group_35_to_59}] = 0.8622;
++    contacts_other[{age_group_15_to_34, age_group_60_to_79}] = 0.1440;
++    contacts_other[{age_group_15_to_34, age_group_80_plus}]  = 0.0077;
++    contacts_other[{age_group_35_to_59, age_group_0_to_4}]   = 0.0204;
++    contacts_other[{age_group_35_to_59, age_group_5_to_14}]  = 0.1444;
++    contacts_other[{age_group_35_to_59, age_group_15_to_34}] = 0.5738;
++    contacts_other[{age_group_35_to_59, age_group_35_to_59}] = 1.2127;
++    contacts_other[{age_group_35_to_59, age_group_60_to_79}] = 0.3433;
++    contacts_other[{age_group_35_to_59, age_group_80_plus}]  = 0.0178;
++    contacts_other[{age_group_60_to_79, age_group_0_to_4}]   = 0.0371;
++    contacts_other[{age_group_60_to_79, age_group_5_to_14}]  = 0.0393;
++    contacts_other[{age_group_60_to_79, age_group_15_to_34}] = 0.4171;
++    contacts_other[{age_group_60_to_79, age_group_35_to_59}] = 0.9666;
++    contacts_other[{age_group_60_to_79, age_group_60_to_79}] = 0.7495;
++    contacts_other[{age_group_60_to_79, age_group_80_plus}]  = 0.0257;
++    contacts_other[{age_group_80_plus, age_group_0_to_4}]    = 0.0791;
++    contacts_other[{age_group_80_plus, age_group_5_to_14}]   = 0.0800;
++    contacts_other[{age_group_80_plus, age_group_15_to_34}]  = 0.3480;
++    contacts_other[{age_group_80_plus, age_group_35_to_59}]  = 0.5588;
++    contacts_other[{age_group_80_plus, age_group_60_to_79}]  = 0.2769;
++    contacts_other[{age_group_80_plus, age_group_80_plus}]   = 0.0180;
++
++    mio::CustomIndexArray<ScalarType, mio::AgeGroup, mio::AgeGroup> contacts_random(
++        {mio::AgeGroup(n_age_groups), mio::AgeGroup(n_age_groups)}, 1.0);
++
++    for (auto& loc : world.get_locations()) {
++        switch (loc.get_type()) {
++        case mio::abm::LocationType::Home:
++            loc.get_infection_parameters().get<mio::abm::ContactRates>() = contacts_home;
++            loc.get_infection_parameters().get<mio::abm::ContactRates>().array() *= 1.4; //17 hours //intensity
++            loc.get_infection_parameters().get<mio::abm::ContactRates>().array() *= 15.0; // Intensity
++            break;
++        case mio::abm::LocationType::School:
++            loc.get_infection_parameters().get<mio::abm::ContactRates>() = contacts_school;
++            loc.get_infection_parameters().get<mio::abm::ContactRates>().array() *= 4.8; //5h
++            break;
++        case mio::abm::LocationType::Work:
++            loc.get_infection_parameters().get<mio::abm::ContactRates>() = contacts_work;
++            loc.get_infection_parameters().get<mio::abm::ContactRates>().array() *= 3.0 * 0.5; // 7h
++            break;
++        case mio::abm::LocationType::SocialEvent:
++            loc.get_infection_parameters().get<mio::abm::ContactRates>() = contacts_other;
++            loc.get_infection_parameters().get<mio::abm::ContactRates>().array() *= 1.2; //aufteilung
++            loc.get_infection_parameters().get<mio::abm::ContactRates>().array() *= 2.0; // intensity
++            loc.get_infection_parameters().get<mio::abm::ContactRates>().array() *= 6.0; // 4 hours
++            break;
++        case mio::abm::LocationType::BasicsShop:
++            loc.get_infection_parameters().get<mio::abm::ContactRates>() = contacts_other;
++            loc.get_infection_parameters().get<mio::abm::ContactRates>().array() *= 0.8; //aufteilung
++            loc.get_infection_parameters().get<mio::abm::ContactRates>().array() *= 0.33; // intensity
++            loc.get_infection_parameters().get<mio::abm::ContactRates>().array() *= 12.0; // 2 hours
++            break;
++        default:
++            loc.get_infection_parameters().get<mio::abm::ContactRates>() = contacts_random;
++            break;
++        }
++    }
++}
++
++void set_local_parameters_event(mio::abm::Model& world, double contact_rate_multiplier)
++{
++    set_local_parameters(world);
++    for (auto& loc : world.get_locations()) {
++        switch (loc.get_type()) {
++        case mio::abm::LocationType::Home:
++            loc.get_infection_parameters().get<mio::abm::ContactRates>().array() *= contact_rate_multiplier; //15 hours
++            break;
++        case mio::abm::LocationType::School:
++            loc.get_infection_parameters().get<mio::abm::ContactRates>().array() *= contact_rate_multiplier; //2 hours
++            break;
++        case mio::abm::LocationType::Work:
++            loc.get_infection_parameters().get<mio::abm::ContactRates>().array() *= contact_rate_multiplier; // 3 hours
++            break;
++        case mio::abm::LocationType::SocialEvent:
++            loc.get_infection_parameters().get<mio::abm::ContactRates>().array() *= contact_rate_multiplier; // 3 hours
++            break;
++        case mio::abm::LocationType::BasicsShop:
++            loc.get_infection_parameters().get<mio::abm::ContactRates>().array() *= contact_rate_multiplier; // 2 hours
++            break;
++        default:
++            loc.get_infection_parameters().get<mio::abm::ContactRates>().array() *= contact_rate_multiplier;
++            break;
++        }
++    }
++}
+\ No newline at end of file
+diff --git a/cpp/models/abm/parameter_setter.h b/cpp/models/abm/parameter_setter.h
+new file mode 100644
+index 000000000..524764d5a
+--- /dev/null
++++ b/cpp/models/abm/parameter_setter.h
+@@ -0,0 +1,7 @@
++#pragma once
++#include "model.h"
++
++void set_parameters(mio::abm::Parameters& params);
++void set_local_parameters(mio::abm::Model& world);
++std::pair<double, double> get_my_and_sigma(std::pair<double, double> mean_and_std);
++void set_local_parameters_event(mio::abm::Model& world, double contact_rate_multiplier);
+\ No newline at end of file
+diff --git a/cpp/models/abm/result_simulation.h b/cpp/models/abm/result_simulation.h
+new file mode 100644
+index 000000000..5a51a6e99
+--- /dev/null
++++ b/cpp/models/abm/result_simulation.h
+@@ -0,0 +1,64 @@
++/* 
++* Copyright (C) 2020-2025 MEmilio
++*
++* Authors: Rene Schmieding
++*
++* Contact: Martin J. Kuehn <Martin.Kuehn@DLR.de>
++*
++* Licensed under the Apache License, Version 2.0 (the "License");
++* you may not use this file except in compliance with the License.
++* You may obtain a copy of the License at
++*
++*     http://www.apache.org/licenses/LICENSE-2.0
++*
++* Unless required by applicable law or agreed to in writing, software
++* distributed under the License is distributed on an "AS IS" BASIS,
++* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++* See the License for the specific language governing permissions and
++* limitations under the License.
++*/
++
++#include "abm/common_abm_loggers.h"
++#include "abm/simulation.h"
++
++namespace mio
++{
++namespace abm
++{
++
++/// @brief Simulation holding its own History to provide a get_result member. Can be used for a ParameterStudy.
++template <class M = Model>
++class ResultSimulation : public Simulation<M>
++{
++public:
++    using Model = M;
++
++    /// @brief Create a simulation, moving the model.
++    ResultSimulation(Model&& m, TimePoint t)
++        : Simulation<Model>(t, std::move(m))
++    {
++    }
++
++    /**
++     * @brief Run the simulation until the given time point.
++     * @param tmax Final time point for the simualtion. 
++     */
++    void advance(TimePoint tmax)
++    {
++        Simulation<Model>::advance(tmax, history);
++    }
++
++    /**
++     * @brief Return the simulation result aggregated by infection states.
++     */
++    const mio::TimeSeries<double>& get_result() const
++    {
++        return get<0>(history.get_log());
++    }
++
++    mio::History<TimeSeriesWriter, LogInfectionState> history{
++        Eigen::Index(InfectionState::Count)}; ///< History used to create the result TimeSeries.
++};
++
++} // namespace abm
++} // namespace mio
+diff --git a/cpp/models/abm/simulation.h b/cpp/models/abm/simulation.h
+index 2f973cf09..2778e7cea 100644
+--- a/cpp/models/abm/simulation.h
++++ b/cpp/models/abm/simulation.h
+@@ -35,14 +35,15 @@ namespace abm
+ template <class M = Model>
+ class Simulation
+ {
+-
+ public:
++    using Model = M;
++
+     /**
+      * @brief Create a simulation.
+      * @param[in] t0 The starting time of the Simulation.
+      * @param[in] model The Model to simulate.
+      */
+-    Simulation(TimePoint t0, M&& model)
++    Simulation(TimePoint t0, Model&& model)
+         : m_model(std::move(model))
+         , m_t(t0)
+         , m_dt(hours(1))
+@@ -87,11 +88,11 @@ public:
+     /**
+      * @brief Get the Model that this Simulation evolves.
+      */
+-    M& get_model()
++    Model& get_model()
+     {
+         return m_model;
+     }
+-    const M& get_model() const
++    const Model& get_model() const
+     {
+         return m_model;
+     }
+@@ -105,7 +106,7 @@ private:
+         m_t += m_dt;
+     }
+ 
+-    M m_model; ///< The Model to simulate.
++    Model m_model; ///< The Model to simulate.
+     TimePoint m_t; ///< The current TimePoint of the Simulation.
+     TimeSpan m_dt; ///< The length of the time steps.
+ };
