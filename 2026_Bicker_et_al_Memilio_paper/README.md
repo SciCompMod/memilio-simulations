@@ -1,6 +1,6 @@
 # MEmilio Paper 2026 (Bicker et al.)
 
-This folder contains the code and scripts used to generate the results and figures for the MEmilio paper.
+This folder contains the code and scripts used to generate the results and figures for the MEmilio paper. A basic introduction on how to setup and run MEmilio's examples is found at https://memilio.readthedocs.io/en/latest/getting_started.html#how-to-use-memilio. The initial installation time on an individual computer should take several minutes.
 
 ## Structure
 

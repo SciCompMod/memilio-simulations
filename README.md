@@ -29,7 +29,15 @@ The following `<OPTION>`s can be set:
 - `BUILD_munich_graph_sim`
 - `BUILD_2025_Kerkmann_Korf_et_al_Testing`
 - Figures for the MEmilio paper (2026_Bicker_et_al_Memilio_paper). Note that each Figure has its own subdirectory.
-  - `2026_Bicker_et_al_Memilio_paper-Fig6_d` 
+  - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_b`
+  - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_c`
+  - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_d_and_e`
+  - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig4_f_and_i`
+  - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig5`
+  - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_a`
+  - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_b_and_f`
+  - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_d`
+  - `BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_e`
 
 If you do not set an option, no simulation will be built. After a simulation has been built, you can prevent cmake from rebuilding it by setting `cmake .. -D<OPTION>=OFF`, although rebuilding should only take a few seconds. You can also set multiple options at once by adding more pairs `-D<OPTION>=<VALUE>` to the end, with `<VALUE>` being either `ON` or `OFF`.
 
