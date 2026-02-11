@@ -14,11 +14,17 @@ endif()
 
 # FetchContent to fetch the MEmilio library in the correct version.
 include(FetchContent)
+
+# Command used to patch differences from the developement branch to GIT_TAG_MEMILIO
+set(memilio_patch git apply ${CMAKE_CURRENT_SOURCE_DIR}/experimental-simulations-memilio-paper.patch)
   
 FetchContent_Declare(
   memilio
   GIT_REPOSITORY https://github.com/SciCompMod/memilio.git
   GIT_TAG ${GIT_TAG_MEMILIO}
+  # Apply the patch, but only once
+  PATCH_COMMAND ${memilio_patch}
+  UPDATE_DISCONNECTED 1
 )
 
 FetchContent_MakeAvailable(memilio)
