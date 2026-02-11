@@ -9,9 +9,9 @@ from keras.models import Model
 from spektral.layers import ARMAConv
 import spektral
 
-from memilio.surrogatemodel.GNN.data_generation_nodeswithvariance import (
+from GNN.data_generation import (
     run_secir_groups_simulation, get_graph)
-from memilio.surrogatemodel.GNN.GNN_utils import transform_mobility_directory
+from GNN.GNN_utils import transform_mobility_directory
 from memilio.simulation import set_log_level, LogLevel
 
 # Reduce log verbosity

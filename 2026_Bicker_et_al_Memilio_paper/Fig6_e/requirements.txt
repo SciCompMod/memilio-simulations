@@ -1,0 +1,7 @@
+_deps/memilio-src/pycode/memilio-simulation
+_deps/memilio-src/pycode/memilio-surrogatemodel
+numpy
+pandas
+progress
+spektral>=1.2
+tensorflow>=2.12.0

@@ -23,3 +23,9 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(memilio)
+
+set(CMAKE_TLS_VERIFY 0)
+
+add_custom_target(install_memilio_py ALL
+  COMMAND bash ../install.sh
+)
