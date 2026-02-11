@@ -7,8 +7,6 @@
 
 ## Files
 
-- **Data**:
-    - `ILI_germany_2016_2019.csv`: Weekly incidence of influenza cases in Germany between 2016 and 2019.
 - **Python Simulations**:
     - `simulation.py`: Simulation of the SDE model.
     - `influenza_plotting.py`: Creation of the plots given samples.

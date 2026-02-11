@@ -14,7 +14,7 @@
     - `influenza_plotting.py`: Creation of the plots given samples.
     - `plotting_helpers.py`: Definition of the plotting functions for Fig 4c.
 - **Particle Filters and Fitting in Julia**
-    - `seirdb_ebola/`: Fitting of the SIRS model (mainly in Julia).
+    - `seirdb_ebola/`: Fitting of the SEIRDB model (mainly in Julia).
     - `SimParticleFilter/`: Utils for the fitting. 
 
 ## How to Run
