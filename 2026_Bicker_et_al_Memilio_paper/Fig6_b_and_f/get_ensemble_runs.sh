@@ -17,7 +17,7 @@ echo Running on node $SLURM_JOB_NODELIST.
 # module load PrgEnv/gcc13-openmpi
 
 # Define parameters used as command line arguments.
-num_runs=10 #1024
+num_runs=1024
 
 for num_mpi in 1 2 4 8 16 32 64 128 168
 do
