@@ -6,18 +6,18 @@
 #SBATCH --ntasks=8
 #SBATCH --cpus-per-task=1
 #SBATCH --exclusive
-#SBATCH --nodelist="be-cpu04"
+#SBATCH --nodelist="be-cpu04, be-cpu02, be-cpu03"
 #SBATCH --time=1-0:00:00
 
 # Run this script from build folder with downloaded data in repository
 echo Running on node $SLURM_JOB_NODELIST.
 
-# Load module
-module purge
-module load PrgEnv/gcc13-openmpi
+# # Load module
+# module purge
+# module load PrgEnv/gcc13-openmpi
 
 # Define parameters used as command line arguments.
-num_runs=1280 #1024
+num_runs=10 #1024
 
 for num_mpi in 1 2 4 8 16 32 64 128 168
 do

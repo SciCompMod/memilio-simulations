@@ -207,27 +207,27 @@ mio::IOResult<mio::UncertainContactMatrix<ScalarType>> get_contact_matrix(std::s
     }
 
     // Add NPIs to the contact matrices.
-    mio::Date end_date     = mio::offset_date_by_days(start_date, (int)tmax);
-    auto start_npi_october = mio::Date(2020, 10, 11);
-    if ((int)(start_npi_october < end_date) & (int)(start_date < start_npi_october)) {
-        auto offset_npi = mio::SimulationTime<ScalarType>(mio::get_offset_in_days(start_npi_october, start_date));
-        for (auto&& contact_location : contact_locations) {
-            contact_matrices[size_t(contact_location.first)].add_damping(
-                Eigen::MatrixXd::Constant(num_groups, num_groups, 0.4),
-                offset_npi); // no uncertain: internal type is MatrixXd
-        }
-    }
+    // mio::Date end_date     = mio::offset_date_by_days(start_date, (int)tmax);
+    // auto start_npi_october = mio::Date(2020, 10, 11);
+    // if ((int)(start_npi_october < end_date) & (int)(start_date < start_npi_october)) {
+    //     auto offset_npi = mio::SimulationTime<ScalarType>(mio::get_offset_in_days(start_npi_october, start_date));
+    //     for (auto&& contact_location : contact_locations) {
+    //         contact_matrices[size_t(contact_location.first)].add_damping(
+    //             Eigen::MatrixXd::Constant(num_groups, num_groups, 0.4),
+    //             offset_npi); // no uncertain: internal type is MatrixXd
+    //     }
+    // }
 
-    // Add NPIs to the contact matrices.
-    start_npi_october = mio::Date(2020, 10, 21);
-    if ((int)(start_npi_october < end_date) & (int)(start_date < start_npi_october)) {
-        auto offset_npi = mio::SimulationTime<ScalarType>(mio::get_offset_in_days(start_npi_october, start_date));
-        for (auto&& contact_location : contact_locations) {
-            contact_matrices[size_t(contact_location.first)].add_damping(
-                Eigen::MatrixXd::Constant(num_groups, num_groups, 0.1),
-                offset_npi); // no uncertain: internal type is MatrixXd
-        }
-    }
+    // // Add NPIs to the contact matrices.
+    // start_npi_october = mio::Date(2020, 10, 21);
+    // if ((int)(start_npi_october < end_date) & (int)(start_date < start_npi_october)) {
+    //     auto offset_npi = mio::SimulationTime<ScalarType>(mio::get_offset_in_days(start_npi_october, start_date));
+    //     for (auto&& contact_location : contact_locations) {
+    //         contact_matrices[size_t(contact_location.first)].add_damping(
+    //             Eigen::MatrixXd::Constant(num_groups, num_groups, 0.1),
+    //             offset_npi); // no uncertain: internal type is MatrixXd
+    //     }
+    // }
     return mio::success(mio::UncertainContactMatrix<ScalarType>(contact_matrices));
 }
 
@@ -347,6 +347,12 @@ mio::IOResult<void> simulate(std::string save_dir, std::string data_dir, size_t 
     using Model = mio::lsecir::Model<ScalarType, LctState, LctState, LctState, LctState, LctState, LctState>;
 
     Model model = initialize_lsecir<Model>(data_dir).value();
+    // Set integrator of fifth order with fixed step size and perform simulation.
+    // auto integrator =
+    //     std::make_unique<mio::ControlledStepperWrapper<ScalarType, boost::numeric::odeint::runge_kutta_cash_karp54>>();
+    // // Choose dt_min = dt_max to get a fixed step size.
+    // integrator->set_dt_min(dt);
+    // integrator->set_dt_max(dt);
 
     mio::ParameterStudy parameter_study(model, params::t0, params::tmax, params::dt, num_ensemble_runs);
     ScalarType total_time = 0;
@@ -407,7 +413,7 @@ int main(int argc, char** argv)
     auto cli_parameters = mio::cli::ParameterSetBuilder()
                               .add<"ResultDirectory">(
                                   mio::path_join(mio::base_dir(), "cpp/examples/simulation_paper_lct/results_ensemble"))
-                              .add<"DataDirectory">(mio::path_join(mio::base_dir(), "data"))
+                              .add<"DataDirectory">(mio::path_join(mio::base_dir(), "../../../data"))
                               .add<"NumberEnsembleRuns">(100, {.alias = "nRun"})
                               .build();
 

@@ -44,38 +44,39 @@ ScalarType uncertain(ScalarType v)
 
 namespace params
 {
-size_t num_agegroups = 6;
+size_t num_agegroups    = 6;
 size_t total_population = 80 * 1e6;
-int num_processes = 1;
+int num_processes       = 1;
 
 // Epidemiological parameters
 
 // Define (age-resolved) parameters.
 mio::Date start_date(2020, 12, 24);
-const ScalarType t0                       = 0;
-const ScalarType tmax                     = 30;
-const ScalarType dt                       = 0.01;
+const ScalarType t0   = 0;
+const ScalarType tmax = 30;
+const ScalarType dt   = 0.01;
 
-}
+} // namespace params
 
 using Model = mio::isecir::Model;
 
-mio::IOResult<Model> initialize_isecir(std::string data_dir) 
+mio::IOResult<Model> initialize_isecir(std::string data_dir)
 {
     mio::CustomIndexArray<ScalarType, mio::AgeGroup> total_population_init =
         mio::CustomIndexArray<ScalarType, mio::AgeGroup>(mio::AgeGroup(params::num_agegroups));
     mio::CustomIndexArray<ScalarType, mio::AgeGroup> deaths_init = mio::CustomIndexArray<ScalarType, mio::AgeGroup>(
         mio::AgeGroup(params::num_agegroups),
         0.); // The number of deaths will be overwritten if reported data is used for initialization.
-    
-    Model model(mio::TimeSeries<ScalarType>((size_t)mio::isecir::InfectionTransition::Count),
-                             total_population_init, deaths_init, params::num_agegroups);
 
-    BOOST_OUTCOME_TRY(auto&& rki_data, mio::read_confirmed_cases_data(mio::path_join(data_dir, "Germany/pydata/cases_all_age_ma7.json")));
+    Model model(mio::TimeSeries<ScalarType>((size_t)mio::isecir::InfectionTransition::Count), total_population_init,
+                deaths_init, params::num_agegroups);
+
+    BOOST_OUTCOME_TRY(auto&& rki_data, mio::read_confirmed_cases_data(
+                                           mio::path_join(data_dir, "Germany/pydata/cases_all_age_ma7.json")));
     mio::CustomIndexArray<ScalarType, mio::AgeGroup> scale_confirmed_cases =
-            mio::CustomIndexArray<ScalarType, mio::AgeGroup>(mio::AgeGroup(params::num_agegroups), 1.);
+        mio::CustomIndexArray<ScalarType, mio::AgeGroup>(mio::AgeGroup(params::num_agegroups), 1.);
     BOOST_OUTCOME_TRY(mio::isecir::set_initial_flows<mio::ConfirmedCasesDataEntry>(
-            model, params::dt, rki_data, params::start_date, scale_confirmed_cases));
+        model, params::dt, rki_data, params::start_date, scale_confirmed_cases));
 
     return mio::success(model);
 }
@@ -87,13 +88,14 @@ Model draw_sample(const Model& model)
     // TransitionDistributions
     mio::SmootherCosine<ScalarType> smoothcos1(uncertain(2.0));
     mio::StateAgeFunctionWrapper<ScalarType> delaydistribution1(smoothcos1);
-    std::vector<mio::StateAgeFunctionWrapper<ScalarType>> vec_delaydistrib1((size_t)mio::isecir::InfectionTransition::Count, delaydistribution1);
+    std::vector<mio::StateAgeFunctionWrapper<ScalarType>> vec_delaydistrib1(
+        (size_t)mio::isecir::InfectionTransition::Count, delaydistribution1);
     for (mio::AgeGroup group = mio::AgeGroup(0); group < mio::AgeGroup(params::num_agegroups); ++group) {
         copy.parameters.get<mio::isecir::TransitionDistributions>()[group] = vec_delaydistrib1;
     }
 
     // Furhter epidemiological parameters
-    auto draw_const_func = [&](ScalarType value){
+    auto draw_const_func = [&](ScalarType value) {
         mio::ConstantFunction<ScalarType> constfunc(uncertain(value));
         return mio::StateAgeFunctionWrapper<ScalarType>(constfunc);
     };
@@ -132,12 +134,11 @@ mio::IOResult<void> simulate(std::string save_dir, std::string data_dir, size_t 
         [](auto&& params_model, ScalarType, ScalarType dt, size_t) {
             auto copy = params_model;
             return mio::isecir::Simulation(draw_sample(copy), dt);
-        }, 
+        },
         [&](auto results_model, auto&& run_idx) {
             auto interpolated_results = mio::interpolate_simulation_result(results_model.get_result());
             mio::unused(interpolated_results, run_idx);
-        }
-        );
+        });
     if (mio::mpi::is_root()) {
         total_time += omp_get_wtime();
     }
@@ -155,15 +156,16 @@ mio::IOResult<void> simulate(std::string save_dir, std::string data_dir, size_t 
 int main(int argc, char** argv)
 {
     auto cli_parameters = mio::cli::ParameterSetBuilder()
-                          .add<"ResultDirectory">(mio::path_join(mio::base_dir(), "cpp/examples/simulation_paper_ide/results_ensemble"))
-                          .add<"DataDirectory">(mio::path_join(mio::base_dir(), "data"))
-                          .add<"NumberEnsembleRuns">(100, {.alias = "nRun"})
-                          .build();
+                              .add<"ResultDirectory">(
+                                  mio::path_join(mio::base_dir(), "cpp/examples/simulation_paper_ide/results_ensemble"))
+                              .add<"DataDirectory">(mio::path_join(mio::base_dir(), "../../../data"))
+                              .add<"NumberEnsembleRuns">(100, {.alias = "nRun"})
+                              .build();
 
     auto cli_result = mio::command_line_interface(argv[0], argc, argv, cli_parameters, {"ResultDirectory"});
     if (!cli_result) {
-        std::cout << cli_result.error().message();  
-        return cli_result.error().code().value();  
+        std::cout << cli_result.error().message();
+        return cli_result.error().code().value();
     }
 
     boost::filesystem::path res_dir(cli_parameters.get<"ResultDirectory">());
@@ -174,7 +176,8 @@ int main(int argc, char** argv)
     MPI_Comm_size(mio::mpi::get_world(), &size);
     params::num_processes = size;
 
-    auto result = simulate(cli_parameters.get<"ResultDirectory">(), cli_parameters.get<"DataDirectory">(), cli_parameters.get<"NumberEnsembleRuns">());
+    auto result = simulate(cli_parameters.get<"ResultDirectory">(), cli_parameters.get<"DataDirectory">(),
+                           cli_parameters.get<"NumberEnsembleRuns">());
     if (!result) {
         if (mio::mpi::is_root()) {
             printf("%s\n", result.error().formatted_message().c_str());
