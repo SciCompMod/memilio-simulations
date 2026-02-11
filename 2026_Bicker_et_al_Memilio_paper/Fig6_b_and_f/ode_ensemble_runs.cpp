@@ -260,9 +260,8 @@ int main(int argc, char** argv)
 {
     mio::set_log_level(mio::LogLevel::err);
     auto cli_parameters = mio::cli::ParameterSetBuilder()
-                              .add<"ResultDirectory">(
-                                  mio::path_join(mio::base_dir(), "cpp/examples/simulation_paper_ode/results_ensemble"))
-                              .add<"DataDirectory">(mio::path_join(mio::base_dir(), "../../../data"))
+                              .add<"ResultDirectory">((mio::path_join(mio::base_dir(), "../../../results")))
+                              .add<"DataDirectory">(mio::path_join(mio::base_dir(), "data"))
                               .add<"NumberEnsembleRuns">(100, {.alias = "nRun"})
                               .build();
 

@@ -47,11 +47,15 @@ target_link_libraries(sim_ide_runtime PRIVATE memilio ide_secir)
 
 if(MEMILIO_ENABLE_MPI AND MEMILIO_ENABLE_OPENMP)
     add_executable(sim_ode_ensemble_runs ode_ensemble_runs.cpp)
-    target_link_libraries(sim_ode_ensemble_runs PRIVATE memilio ode_secir)#  OpenMP::OpenMP_CXX MPI::MPI_CXX)
+    target_link_libraries(sim_ode_ensemble_runs PRIVATE memilio ode_secir)
 
     add_executable(sim_lct_ensemble_runs lct_ensemble_runs.cpp)
-    target_link_libraries(sim_lct_ensemble_runs PRIVATE memilio lct_secir)#  OpenMP::OpenMP_CXX MPI::MPI_CXX)
+    target_link_libraries(sim_lct_ensemble_runs PRIVATE memilio lct_secir)
 
     add_executable(sim_ide_ensemble_runs ide_ensemble_runs.cpp)
-    target_link_libraries(sim_ide_ensemble_runs PRIVATE memilio ide_secir)#  OpenMP::OpenMP_CXX MPI::MPI_CXX)
+    target_link_libraries(sim_ide_ensemble_runs PRIVATE memilio ide_secir)
 endif()
+
+add_custom_target(install_memilio_py ALL
+  COMMAND bash ../install.sh
+)

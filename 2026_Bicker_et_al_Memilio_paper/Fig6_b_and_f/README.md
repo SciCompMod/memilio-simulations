@@ -26,10 +26,18 @@
 1.  **Install the project**:
     Configure the project using CMake as explained [here](../../README.md#configuring-using-cmake).
 
-2. **Run the simulation**:
+2. **Get the required data**:
+    Download the required data to run the simulations with:
+    ```bash
+    cd 2026_Bicker_et_al_Memilio_paper/Fig6_b_and_f
+    source build/venv/bin/activate
+    python build/_deps/memilio-src/pycode/memilio-epidata/memilio/epidata/getSimulationData.py -o "build/_deps/memilio-src/data"
+    ```
+
+3. **Run the simulation**:
     Then you can run the simulations for Fig. 6b with 
     ```bash
-    ./2026_Bicker_et_al_Memilio_paper/Fig6_b_and_f/build/bin/sim_ode_runtime -NumberRuns $num_runs -NumberWarmupRuns $num_warm_up_runs -NumberRegions $i
+    ./build/bin/sim_ode_runtime -NumberRuns $num_runs -NumberWarmupRuns $num_warm_up_runs -NumberRegions $i
     ```
     and specify the number of runs, the number of warmup runs and the number of regions.
 
@@ -41,7 +49,7 @@
 
     For the parallel scaling, you can run the simulations with 
     ```bash
-    mpirun -n $num_mpi ./2026_Bicker_et_al_Memilio_paper/Fig6_b_and_f/build/bin/sim_ode_ensemble_runs -NumberEnsembleRuns $num_runs
+    mpirun -n $num_mpi ./build/bin/sim_ode_ensemble_runs -NumberEnsembleRuns $num_runs
     ```
     and with 
     ```bash
@@ -49,7 +57,7 @@
     ```
     run the simulation with different numbers of threads.
 
-3. **Create the plots**:
+4. **Create the plots**:
     To create the plots, run the plotting script with 
     ```bash
     python runtime_scaling_region_plot.py

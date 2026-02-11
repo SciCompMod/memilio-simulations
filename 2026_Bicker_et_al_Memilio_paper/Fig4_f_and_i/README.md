@@ -20,6 +20,7 @@
 2. **Download the required data**:
     Download the data for Germany by running 
     ```bash
+    cd 2026_Bicker_et_al_Memilio_paper/Fig4_f_and_i
     source build/venv/bin/activate
     python build/_deps/memilio-src/pycode/memilio-epidata/memilio/epidata/getSimulationData.py -o "build/_deps/memilio-src/data"
     ```
@@ -29,7 +30,7 @@
     
     For example, for the scenario of no NPIs in place:
     ```bash
-    ./2026_Bicker_et_al_Memilio_paper/Fig4_f_and_i/build/bin/sim_graph_germany_nuts3_ode -TestCase 0
+    ./build/bin/sim_graph_germany_nuts3_ode -TestCase 0
     ```
 
     The possible scenarios are:

@@ -24,6 +24,7 @@ We provide the following files for completeness, although the fitting won't work
 2. **Create the plots given the samples**:
     You can create the plots with
     ```bash
+    cd 2026_Bicker_et_al_Memilio_paper/Fig4_b
     source build/venv/bin/activate
-    python 2026_Bicker_et_al_Memilio_paper/Fig4_b/influenza_plotting.py
+    python influenza_plotting.py
     ```
