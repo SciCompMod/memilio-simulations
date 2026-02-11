@@ -30,11 +30,11 @@ namespace simParams
     // dynamic dampings settings (control variable)
     int num_dynamic_dampings = 2;
 
-    double strength_lower_bound = 0.0;
-    double strength_upper_bound = 1.0;
+    double strength_lower_bound = 0.2;
+    double strength_upper_bound = 0.9;
 
     // constraint
-    double constraint_compartment_upper_bound = 250000;
+    double constraint_compartment_upper_bound = 375000;
 
     // opt variables
     int control_interval = 1; // How often to update objective; 1 = each day
@@ -500,16 +500,19 @@ void Secir_NLP::eval_objective_constraints(const std::vector<FP>& x, std::vector
             FP inf_rel = (sum_inf / model.populations.get_total()) * dynamic_npis.get_base_value();
 
             // Evaluate each NPI parameter
-            size_t index = 0;
-            for (auto& threshold : dynamic_npis.get_thresholds()) {
-                FP strength = dynamic_NPI_strengths[index];
-
-                if (inf_rel >= threshold.first) {
-                    objective += strength * (model.populations.get_total() / total_population);
-                }
-
-                index++;
+            // size_t index = 0;
+            auto thresholds = dynamic_npis.get_thresholds();
+            // // for (auto& threshold : dynamic_npis.get_thresholds()) {
+            // FP strength = dynamic_NPI_strengths[index];
+            if (inf_rel >= thresholds[0].first) {
+                objective += dynamic_NPI_strengths[0] * (model.populations.get_total() / total_population);
             }
+            else if (inf_rel >= thresholds[1].first) {
+                objective += dynamic_NPI_strengths[1] * (model.populations.get_total() / total_population);
+            }
+
+            // index++;
+            // }
         }
     }
 

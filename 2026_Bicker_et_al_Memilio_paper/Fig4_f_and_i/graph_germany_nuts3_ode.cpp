@@ -59,9 +59,10 @@ enum class RunMode
 enum class TestCase
 {
     Open,
-    KeepNPIFomInference,
+    KeepNPIFromInference,
     Lockdown,
     Dynamic,
+    DynamicOptimalControl,
 };
 
 /**
@@ -72,29 +73,13 @@ enum class TestCase
 mio::IOResult<void> set_covid_parameters(mio::osecir::Parameters<double>& params)
 {
 
-    //times
-    // params.get<mio::osecir::TimeExposed<double>>()            = 3.3;
-    // params.get<mio::osecir::TimeInfectedNoSymptoms<double>>() = 1.9;
-    // params.get<mio::osecir::TimeInfectedSymptoms<double>>()   = 6.9;
-    // params.get<mio::osecir::TimeInfectedSevere<double>>()     = 8;
-    // params.get<mio::osecir::TimeInfectedCritical<double>>()   = 10.5;
-
-    // //probabilities
-    // params.get<mio::osecir::TransmissionProbabilityOnContact<double>>()  = 0.08;
     params.get<mio::osecir::RelativeTransmissionNoSymptoms<double>>()    = 1;
 
-    // params.get<mio::osecir::RecoveredPerInfectedNoSymptoms<double>>()    = 0.207;
-    // params.get<mio::osecir::SeverePerInfectedSymptoms<double>>()         = 0.079;
-    // params.get<mio::osecir::CriticalPerSevere<double>>()                 = 0.173;
-    // params.get<mio::osecir::DeathsPerCritical<double>>()                 = 0.217;
-
     params.get<mio::osecir::TestAndTraceCapacity<double>>()                 = 100000000;
-
 
     params.set<mio::osecir::StartDay<double>>(334);
     params.set<mio::osecir::Seasonality<double>>(0.2);
 
-    // params.get<mio::osecir::RiskOfInfectionFromSymptomatic<double>>()    = 0.0;
     params.get<mio::osecir::MaxRiskOfInfectionFromSymptomatic<double>>() = 1.0;
 
     return mio::success();
@@ -118,35 +103,6 @@ mio::IOResult<void> set_contact_matrices(mio::osecir::Parameters<double>& params
     mio::unused(params);
     return mio::success();
 }
-
-// mio::IOResult<void> set_npis(mio::osecir::Parameters<double>& params, mio::Date start_date)
-// {   
-//     size_t num_groups = size_t(params.get_num_groups());
-//     // npi from inference
-//     auto start_damping = mio::Date(2020, 10, 8);
-//     mio::ContactMatrixGroup& contact_matrix = params.get<mio::osecir::ContactPatterns<double>>();
-//     contact_matrix[0].add_damping(Eigen::MatrixXd::Constant(num_groups, num_groups, 0.2), mio::SimulationTime(mio::get_offset_in_days(start_damping, start_date)));
-
-
-//     // change in npi at end of inference
-//     start_damping = mio::Date(2020, 11, 30);
-//     contact_matrix[0].add_damping(Eigen::MatrixXd::Constant(num_groups, num_groups, 0.0), mio::SimulationTime(mio::get_offset_in_days(start_damping, start_date)));
-//     //contact_matrix[0].add_damping(Eigen::MatrixXd::Constant(num_groups, num_groups, 0.7), mio::SimulationTime(mio::get_offset_in_days(start_damping, start_date)));
-
-//     params.get<mio::osecir::DynamicNPIsImplementationDelay<double>>() = 5;
-//     auto dynamic_npi_dampings = std::vector<mio::DampingSampling<double>>();
-//     dynamic_npi_dampings.push_back(mio::DampingSampling<double>(0.3, mio::DampingLevel(0),
-//                                             mio::DampingType(0), mio::SimulationTime(mio::get_offset_in_days(start_damping, start_date)),
-//                                             {0},  Eigen::VectorXd::Constant(size_t(params.get_num_groups()), 1.0)));
-
-//     auto& dynamic_npis        = params.get<mio::osecir::DynamicNPIsInfectedSymptoms<double>>();
-//     dynamic_npis.set_interval(mio::SimulationTime(1.0));
-//     dynamic_npis.set_duration(mio::SimulationTime(14.0));
-//     dynamic_npis.set_base_value(100'000);
-//     dynamic_npis.set_threshold(200.0, dynamic_npi_dampings);
-
-//     return mio::success();
-// }
 
 mio::IOResult<void> set_initial_compartments(mio::Graph<mio::osecir::Model<double>, mio::MobilityParameters<double>>& params_graph, const fs::path& data_dir)
 {
@@ -194,7 +150,7 @@ mio::IOResult<void> set_sampled_parameters(mio::Graph<mio::osecir::Model<double>
         if (test_case == TestCase::Open){
             damping_value = 0;
         }
-        else if (test_case == TestCase::KeepNPIFomInference){
+        else if (test_case == TestCase::KeepNPIFromInference){
             // t = 15, 30, 45
             damping_value = parameter_list["damping_values"][state - 1][2].asDouble() * 1;
         }
@@ -202,16 +158,36 @@ mio::IOResult<void> set_sampled_parameters(mio::Graph<mio::osecir::Model<double>
             damping_value = std::min(1., parameter_list["damping_values"][state - 1][2].asDouble() * 1.6);
         }
         else if (test_case == TestCase::Dynamic) {
-            damping_value = parameter_list["damping_values"][state - 1][2].asDouble();
-            // damping_value = parameter_list["damping_values"][state - 1][2].asDouble();
+            damping_value = 0.0;
 
             auto dynamic_npi_dampings1 = std::vector<mio::DampingSampling<double>>();
-            dynamic_npi_dampings1.push_back(mio::DampingSampling<double>(0.5, mio::DampingLevel(0),
+            dynamic_npi_dampings1.push_back(mio::DampingSampling<double>(0.77, mio::DampingLevel(0),
                                                     mio::DampingType(0), mio::SimulationTime<double>(0),
                                                     {0},  Eigen::VectorXd::Constant(size_t(params.get_num_groups()), 1.0)));
 
             auto dynamic_npi_dampings2 = std::vector<mio::DampingSampling<double>>();
-            dynamic_npi_dampings2.push_back(mio::DampingSampling<double>(0.68, mio::DampingLevel(0),
+            dynamic_npi_dampings2.push_back(mio::DampingSampling<double>(0.83, mio::DampingLevel(0),
+                                                    mio::DampingType(0), mio::SimulationTime<double>(0),
+                                                    {0},  Eigen::VectorXd::Constant(size_t(params.get_num_groups()), 1.0)));
+
+            auto& dynamic_npis        = params.get<mio::osecir::DynamicNPIsInfectedSymptoms<double>>();
+
+            dynamic_npis.set_interval(mio::SimulationTime<double>(1.0));
+            dynamic_npis.set_duration(mio::SimulationTime<double>(14.0));
+            dynamic_npis.set_base_value(100'000);
+            dynamic_npis.set_threshold(250.0, dynamic_npi_dampings1);
+            dynamic_npis.set_threshold(1000.0, dynamic_npi_dampings2);
+        }
+        else if (test_case == TestCase::DynamicOptimalControl) {
+            damping_value = 0.0;
+
+            auto dynamic_npi_dampings1 = std::vector<mio::DampingSampling<double>>();
+            dynamic_npi_dampings1.push_back(mio::DampingSampling<double>(0.736, mio::DampingLevel(0),
+                                                    mio::DampingType(0), mio::SimulationTime<double>(0),
+                                                    {0},  Eigen::VectorXd::Constant(size_t(params.get_num_groups()), 1.0)));
+
+            auto dynamic_npi_dampings2 = std::vector<mio::DampingSampling<double>>();
+            dynamic_npi_dampings2.push_back(mio::DampingSampling<double>(0.9, mio::DampingLevel(0),
                                                     mio::DampingType(0), mio::SimulationTime<double>(0),
                                                     {0},  Eigen::VectorXd::Constant(size_t(params.get_num_groups()), 1.0)));
 
@@ -297,7 +273,7 @@ mio::IOResult<void> run(const int num_days_sim, mio::Date start_date, const std:
     if (test_case == TestCase::Open){
         test_case_name = "open";
     }
-    else if (test_case == TestCase::KeepNPIFomInference){
+    else if (test_case == TestCase::KeepNPIFromInference){
         // t = 15, 30, 45
         test_case_name = "same";
     }
@@ -306,6 +282,9 @@ mio::IOResult<void> run(const int num_days_sim, mio::Date start_date, const std:
     }
     else if (test_case == TestCase::Dynamic) {
         test_case_name = "dynamic";
+    }
+    else if (test_case == TestCase::DynamicOptimalControl) {
+        test_case_name = "dynamic_opt";
     }
 
     //create or load graph
@@ -346,13 +325,6 @@ mio::IOResult<void> run(const int num_days_sim, mio::Date start_date, const std:
     auto sim = mio::make_mobility_sim<double>(0.0, 0.5, std::move(graph));
     // auto sim = mio::make_no_mobility_sim<double>(0.0, std::move(graph));
     sim.advance(num_days_sim);
-
-    // std::vector<mio::TimeSeries<double>> results;
-    // results.reserve(sim.get_graph().nodes().size());
-    // std::transform(sim.get_graph().nodes().begin(), sim.get_graph().nodes().end(), std::back_inserter(results),
-    //                [](auto& n) {
-    //                    return n.property.get_result();
-    //                });
 
     std::vector<mio::TimeSeries<double>> results = mio::interpolate_simulation_result(sim.get_graph());
     // BOOST_OUTCOME_TRY(auto&& json_node, mio::serialize_json(sim.get_graph().nodes()[0].property.get_simulation().get_model()));

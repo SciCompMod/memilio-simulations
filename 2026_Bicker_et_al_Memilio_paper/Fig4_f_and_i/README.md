@@ -43,6 +43,8 @@
 
     3: "Dynamic" - Dynamic NPIs that are triggered once a threshold is reached.
 
+    4: "DynamicOptimalControl" - Same as "Dynamic", just with optimized NPI strengths.
+
 4. **Create the table of Fig. 4i**
     To create the table, save the terminal output of step 2 in a file named `results/Output_<case>.txt` where \<case\> should be replaced by the scenario name.
     Then run the file with 

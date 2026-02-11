@@ -86,7 +86,7 @@ namespace simParams
     double npis_interval = 1.0;
     double npis_base_value = 100'000;
 
-    std::vector<int> thresholds = {100, 500};
+    std::vector<int> thresholds = {250, 1000};
 }
 
 template <class FP>
@@ -248,7 +248,7 @@ GraphModel<FP> create_graph_model(const std::string& data_directory)
         auto& node                                  = parameter_graph.nodes()[node_idx];
         auto& node_params                           = node.property.parameters;
         int state                                   = static_cast<int>(mio::regions::get_state_id(node.id)) - 1;
-        double damping_value                        = parameter_list["damping_values"][state][2].asDouble();
+        double damping_value                        = 0.0;
         mio::ContactMatrixGroup<FP>& contact_matrix_local = node_params.template get<mio::osecir::ContactPatterns<FP>>();
         contact_matrix_local[0].add_damping(Eigen::MatrixX<FP>::Constant(1, 1, damping_value), mio::SimulationTime<FP>(0.0));
     }
