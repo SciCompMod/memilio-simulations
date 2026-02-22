@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import os
 import numpy as np
 import pandas as pd
@@ -25,18 +24,12 @@ FLOW_CSV_EULER_FMT = DIR_CSV + "flow_commuter_compare_sol_euler_dt_{tag}.csv"
 EXPL_CSV_EULER_FMT = DIR_CSV + \
     "explicit_commuter_compare_sol_euler_dt_{tag}.csv"
 
-DT_LIST = [2.0, 1.0, 0.5, 0.25, 0.125]  # Base-2-Raster
+DT_LIST = [2.0, 1.0, 0.5, 0.25, 0.125] 
 
-# Methods for convergence plots (Panels B and C)
-# Use different colors than SEIR (avoid blue/orange/green/red)
 METHODS = {
-    # purple
     'euler': {'label': 'Euler', 'color': '#9467bd', 'marker': 'o', 'order': 1},
-    # brown
     'rk2':   {'label': 'RK-2', 'color': '#8c564b', 'marker': 's', 'order': 2},
-    # pink
     'rk3':   {'label': 'RK-3', 'color': '#e377c2', 'marker': '^', 'order': 3},
-    # gray
     'rk4':   {'label': 'RK-4', 'color': '#7f7f7f', 'marker': 'D', 'order': 4},
 }
 DTS_CONVERGENCE = [2.0, 1.0, 0.5, 0.25, 0.125]  # Convergence plot range
@@ -270,7 +263,6 @@ def compute_convergence_metrics_exact(dt_list=DT_LIST):
             tag = _fmt_tag(dt)
             df_flow_exact = _read_flow_exact_commuter(
                 FLOW_EXACT_CSV_FMT.format(tag=tag))
-            # Merge with finest explicit solution
             df = pd.merge(df_flow_exact, df_expl_ref, on="Time",
                           suffixes=("_FlowExact", "_Explicit"))
             absM, relM, abs_by_comp = _max_errors_over_time(
@@ -284,14 +276,14 @@ def compute_convergence_metrics_exact(dt_list=DT_LIST):
             data.append({"dt": dt, "abs_max": absM,
                         "rel_max": relM, "abs_by_comp": abs_by_comp})
         except FileNotFoundError as e:
-            print(f"[Warnung][EXACT] dt={dt} übersprungen: {e}")
+            print(f"[Warning][EXACT] dt={dt} skipped: {e}")
     data.sort(key=lambda d: d["dt"])
     return data
 
 # --------------- Multipanel 2×3 (A–F) --------------
 
 
-def build_multipanel_figure(dt_list=DT_LIST, outname="Figure_2_multipanel"):
+def build_multipanel_figure(dt_list=DT_LIST, outname="Figure_4_multipanel"):
     set_settings()
 
     # Colors for compartments (A–D, F) and metrics (E)
@@ -327,14 +319,14 @@ def build_multipanel_figure(dt_list=DT_LIST, outname="Figure_2_multipanel"):
     try:
         dfC_exact = _load_exact_baseline()
     except FileNotFoundError as e:
-        print(f"[Warnung] FLOW_EXACT Baseline fehlt: {e}")
+        print(f"[Warning] FLOW_EXACT Baseline missing: {e}")
         dfC_exact = None
 
     fig, axs = plt.subplots(2, 3, figsize=(18, 10))
     # Physical layout: (A, B, C) / (D, E, F)
     (ax_pos_A, ax_pos_B, ax_pos_C), (ax_pos_D, ax_pos_E, ax_pos_F) = axs
 
-    # Assign content to panels (FINAL arrangement):
+    # Assign content to panels:
     # A: Trajectories
     # B: Convergence - Relative Error (stage-algined)
     # C: Convergence - Relative Error (Phi)
@@ -365,7 +357,7 @@ def build_multipanel_figure(dt_list=DT_LIST, outname="Figure_2_multipanel"):
     axA.set_ylabel("Population")
     axA.set_title("Population trajectories", fontsize=16, pad=4)
 
-    # (B) Convergence - Relative Error (all methods, was Panel C)
+    # (B) Convergence - Relative Error (all methods)
     if all_conv_data_stage_algined:
         dt_range = np.array([min(DTS_CONVERGENCE), max(DTS_CONVERGENCE)])
         for method_name, method_info in METHODS.items():
@@ -396,7 +388,6 @@ def build_multipanel_figure(dt_list=DT_LIST, outname="Figure_2_multipanel"):
                                     alpha=0.5,
                                     zorder=1)
 
-            # Add text label near the last data point (shifted up)
             last_dt = df['dt'].iloc[-1]
             last_err = df['max_rel_error'].iloc[-1]
             axB_conv_rel.text(last_dt * 1.15, last_err * 15.5, method_info['label'],
@@ -474,14 +465,14 @@ def build_multipanel_figure(dt_list=DT_LIST, outname="Figure_2_multipanel"):
                  va="center", transform=axD.transAxes)
     axD.set_title("Exact equivalence (RK-4)", fontsize=16, pad=4)
 
-    # (E) Shares (was old Panel C)
+    # (E) Shares
     for i, lab in enumerate(['S', 'E', 'I', 'R']):
         axE.plot(time_full, xi[:, i], color=color_map[lab], lw=lw_main)
     axE.set_xlabel("Time (days)")
     axE.set_ylabel(r"Commuter share $\xi_j(t)$")
     axE.set_title("Evolution of shares", fontsize=16, pad=4)
 
-    # (F) RK4 error over time - same h (was old E)
+    # (F) RK4 error over time
     for comp in ['S', 'E', 'I', 'R']:
         y = np.abs(diff[comp].to_numpy())
         y[y <= 0] = 1e-16
@@ -498,11 +489,9 @@ def build_multipanel_figure(dt_list=DT_LIST, outname="Figure_2_multipanel"):
                 ha="left", va="bottom", fontsize=23, fontweight="bold", clip_on=False)
 
     # Global legend for compartments (S, E, I, R)
-    # (Integrator labels are shown directly in panels B and C)
     comp_handles = [Line2D([0], [0], color=color_map[k],
                            lw=lw_main, label=k) for k in ["S", "E", "I", "R"]]
 
-    # Adjust space for the global legend at the bottom
     plt.subplots_adjust(bottom=0.18, top=0.92, wspace=0.25, hspace=0.42)
 
     fig.legend(handles=comp_handles,
@@ -519,4 +508,4 @@ def build_multipanel_figure(dt_list=DT_LIST, outname="Figure_2_multipanel"):
 
 if __name__ == "__main__":
     set_settings()
-    build_multipanel_figure(DT_LIST, outname="Figure_2")
+    build_multipanel_figure(DT_LIST, outname="Figure_4")

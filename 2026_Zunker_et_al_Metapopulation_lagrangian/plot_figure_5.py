@@ -1,23 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Benchmark figure – Φ-matrix vs Stage-aligned
-=============================================
-1×3 layout:
-  A  Speedup heatmap: Φ-matrix(Euler) / Stage-aligned(Euler)  [fixed Δt = 1]
-  B  Speedup heatmap: Φ-matrix(RK-4)  / Stage-aligned(RK-4)   [fixed Δt = 1]
-  C  Speedup heatmap: Φ-matrix(RK-4)  / Stage-aligned(RK-4)   [adaptive Δt]
-
-Input
------
-  benchmark_t05_dt1.csv          (fixed step size Δt = 1)
-  benchmark_t05_dt_adaptiv.csv   (adaptive step size)
-
-Output
-------
-  saves/Figures/Figure5/Figure_Bench.{pdf,png}
-"""
-
 import os
 import numpy as np
 import pandas as pd
@@ -27,21 +7,19 @@ import matplotlib.colors as mcolors
 import matplotlib.cm as mcm
 from matplotlib.colors import LinearSegmentedColormap
 
-# Blue→Yellow→Green: both extremes are "good", neutral (1×) is yellow
 _BLYIGN_COLORS = [
-    "#1D6996",  # deep blue    (Φ-matrix faster)
-    "#5BA3C9",  # medium blue
-    "#ABD9E9",  # light blue
-    "#E8F4F8",  # very light blue
-    "#FFFFBF",  # pale yellow  (1×, neutral)
-    "#D9EF8B",  # light green
-    "#91CF60",  # medium green
-    "#31A354",  # dark green   (stage-aligned faster)
-    "#006837",  # deep green
+    "#1D6996",
+    "#5BA3C9",
+    "#ABD9E9",
+    "#E8F4F8",
+    "#FFFFBF",
+    "#D9EF8B",
+    "#91CF60",
+    "#31A354",
+    "#006837",
 ]
 
 
-# ── Colormap helper: yellow pinned at `center` ───────────────────────────
 def make_rdylgn_centered(vmin: float, vmax: float, center: float = 1.0):
     """Return a blue→yellow→green colormap where `center` shows as yellow.
 
@@ -52,7 +30,7 @@ def make_rdylgn_centered(vmin: float, vmax: float, center: float = 1.0):
     n = 512
     n_lo = max(1, int(round(n * pivot)))
     n_hi = n - n_lo
-    mid = len(_BLYIGN_COLORS) // 2  # index of yellow
+    mid = len(_BLYIGN_COLORS) // 2 
     cmap_lo = LinearSegmentedColormap.from_list(
         "lo", _BLYIGN_COLORS[:mid + 1], N=n_lo)
     cmap_hi = LinearSegmentedColormap.from_list(
@@ -64,18 +42,17 @@ def make_rdylgn_centered(vmin: float, vmax: float, center: float = 1.0):
     return LinearSegmentedColormap.from_list("BlYlGn_c", colors, N=n)
 
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
+# -- Paths ---------------------------------------------------------------------
 CSV_PATH_DT1 = "benchmark_t05_dt1.csv"
 CSV_PATH_ADAPTIVE = "benchmark_t05_dt_adaptiv.csv"
 
 OUTDIR = os.path.join("saves", "Figures", "Figure5")
 os.makedirs(OUTDIR, exist_ok=True)
 
-# ── Patch index → number of patches ───────────────────────────────────────────
-# Matches C++: const std::vector<int> commuter_group_counts = {16,32,64,128,256,512,1024};
+# -- Patch index → number of patches -------------------------------------------
 PATCH_MAP = {i: v for i, v in enumerate([16, 32, 64, 128, 256, 512, 1024])}
 
-# ── Panel definitions: (num_method, den_method, csv_path, title) ─────────────
+# -- Panel definitions: (num_method, den_method, csv_path, title) -------------
 PANELS = [
     (
         "matrix_phi_reconstruction(Euler)",
@@ -97,9 +74,7 @@ PANELS = [
     ),
 ]
 
-# ── RC settings (matching Figure 4 style) ────────────────────────────────────
-
-
+# -- RC settings (matching Figure 4 style) ------------------------------------
 def set_style():
     mpl.rcParams.update({
         "font.size":          16,
@@ -117,7 +92,7 @@ def set_style():
     })
 
 
-# ── Data loading ──────────────────────────────────────────────────────────────
+# -- Data loading --------------------------------------------------------------
 def load_data(csv_path: str) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
     parts = df["name"].astype(str).str.strip('"').str.split("/")
@@ -141,7 +116,7 @@ def _agg(df: pd.DataFrame) -> pd.DataFrame:
     return agg
 
 
-# ── Speedup grid helper ───────────────────────────────────────────────────────
+# -- Speedup grid helper -------------------------------------------------------
 def _build_grid(df_agg: pd.DataFrame, num: str, den: str):
     """Compute speedup grid: time(num) / time(den).
 
@@ -170,7 +145,7 @@ def _build_grid(df_agg: pd.DataFrame, num: str, den: str):
     return grid, ages, patches, den_grid
 
 
-# ── Single heatmap panel (no colorbar) ───────────────────────────────────────
+# -- Single heatmap panel (no colorbar) ---------------------------------------
 def _plot_heatmap(ax, grid, ages, patches, norm, cmap, rt_grid=None):
     """Draw the heatmap image + cell annotations + axis labels.
 
@@ -192,7 +167,7 @@ def _plot_heatmap(ax, grid, ages, patches, norm, cmap, rt_grid=None):
             ax.text(j, i, txt, ha="center", va="center",
                     fontsize=11, color=textcol, fontweight="bold")
 
-    # ── Isolines of absolute stage-aligned runtime ────────────────────────────
+    # -- Isolines of absolute stage-aligned runtime ----------------------------
     if rt_grid is not None:
         X = np.arange(len(patches))
         Y = np.arange(len(ages))
@@ -223,17 +198,17 @@ def _plot_heatmap(ax, grid, ages, patches, norm, cmap, rt_grid=None):
     ax.set_ylabel("Age groups")
 
 
-# ── Main figure ───────────────────────────────────────────────────────────────
+# -- Main figure ---------------------------------------------------------------
 def build_figure(outname: str = "Figure_Bench"):
     set_style()
 
-    # ── Load data ─────────────────────────────────────────────────────────────
+    # -- Load data -------------------------------------------------------------
     data = {
         CSV_PATH_DT1:      _agg(load_data(CSV_PATH_DT1)),
         CSV_PATH_ADAPTIVE: _agg(load_data(CSV_PATH_ADAPTIVE)),
     }
 
-    # ── Pre-compute grids & global color scale ────────────────────────────────
+    # -- Pre-compute grids & global color scale --------------------------------
     all_vals = []
     grids_meta = []
     for num, den, csv_path, title in PANELS:
@@ -249,8 +224,7 @@ def build_figure(outname: str = "Figure_Bench"):
     norm = mcolors.LogNorm(vmin=vmin, vmax=vmax)
     cmap = make_rdylgn_centered(vmin, vmax, center=1.0)
 
-    # ── Figure geometry: axes sized so every cell is square ───────────────────
-    # Data dimensions (from the benchmark vectors):
+    # -- Figure geometry: axes sized so every cell is square -------------------
     n_ag = 9    # age-group rows
     n_pat = 7    # patch-count columns
     cell = 0.50  # target cell size in inches → square by construction
@@ -291,7 +265,7 @@ def build_figure(outname: str = "Figure_Bench"):
                 ha="left", va="bottom", fontsize=22,
                 fontweight="bold", clip_on=False)
 
-    # ── Shared horizontal colorbar (manually placed at the bottom) ────────────
+    # -- Shared horizontal colorbar (manually placed at the bottom) ------------
     # Colorbar spans 80% of the total data width, centred.
     data_span = 3*heat_w + 2*gX
     cb_w_inch = data_span * 0.78
@@ -319,11 +293,10 @@ def build_figure(outname: str = "Figure_Bench"):
     cbar.ax.set_xticklabels([f"{t:g}" for t in ticks], fontsize=14)
     cbar.ax.axvline(x=float(norm(1.0)), color="k", lw=1.5, ls="--")
 
-    # ── Save ──────────────────────────────────────────────────────────────────
+    # -- Save ------------------------------------------------------------------
     for ext in ("pdf", "png"):
         path = os.path.join(OUTDIR, f"{outname}.{ext}")
         fig.savefig(path)
-        print(f"[OK] Gespeichert: {path}")
 
 
 if __name__ == "__main__":
