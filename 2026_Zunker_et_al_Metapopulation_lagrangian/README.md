@@ -1,8 +1,8 @@
 # Information
 
 - **Title:**  
-  Efficient handling of mobility and commuting subpopulations in metapopulation models: Mathematical theory and application to epidemic scenarios
-- **DOI:** To be added soon
+  Efficient numerical computation of traveler states in explicit mobility-based metapopulation models: Mathematical theory and application to epidemics
+- **DOI:** https://doi.org/10.48550/arXiv.2603.11275
 - **Authors:**  
   Henrik Zunker, René Schmieding, Jan Hasenauer, Martin Kühn
 
