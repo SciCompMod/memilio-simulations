@@ -78,7 +78,11 @@ def plot_error_distribution(df, output_dir, cap_vals=True, use_log=False):
             mape_values = mape_values[mape_values < 500]
 
         for mape in mape_values:
-            epsilon_label = "non-DP" if row['Epsilon'] == "non-DP" else f"ε = {row['Epsilon']}"
+            # Ensure consistent casing with EPSILON_ORDER
+            if row['Epsilon'] == "non-DP" or row['Epsilon'] == "Non-DP":
+                epsilon_label = "non-DP"
+            else:
+                epsilon_label = f"ε = {row['Epsilon']}"
             all_mape_data.append(
                 {'Epsilon': epsilon_label, 'MAPE (%)': mape, 'Run': row['run']})
 
@@ -99,19 +103,17 @@ def plot_error_distribution(df, output_dir, cap_vals=True, use_log=False):
     mape_df['Epsilon'] = pd.Categorical(
         mape_df['Epsilon'], categories=epsilon_labels, ordered=True)
 
-    # Professional color palette
     colors = ['#2E86AB', '#A23B72', '#F18F01', '#C73E1D', '#7209B7']
 
     plt.figure(figsize=(14, 8))
 
-    # Create boxplot with professional styling
     box_plot = sns.boxplot(x='Epsilon', y='MAPE (%)', data=mape_df,
                            palette=colors, linewidth=1.5,
                            boxprops=dict(linewidth=1.5),
                            whiskerprops=dict(linewidth=1.5),
                            capprops=dict(linewidth=1.5),
                            medianprops=dict(linewidth=2, color='white'),
-                           showfliers=cap_vals)  # Hide outliers when not capping
+                           showfliers=cap_vals)
 
     # plt.title('Distribution of Individual MAPE per Privacy Level (Across All Runs)',
     #           fontsize=20, fontweight='bold', pad=20)
@@ -294,9 +296,9 @@ def plot_scatter_predictions(df, output_dir):
 if __name__ == "__main__":
     cwd = os.getcwd()
     # load results from county_dp file:
-    year = 2020  # 2020
+    year = 2022  # 2020
     input_file = os.path.join(
-        cwd, f"year-{year}_county_predictions_scaled-False_runs-15_rounds-75.csv")
+        cwd, f"year-{year}_county_predictions_scaled-False_runs-15_rounds-75_ma-trailing.csv")
 
     # Create outout directory
     output_dir = create_output_directory(os.path.join(

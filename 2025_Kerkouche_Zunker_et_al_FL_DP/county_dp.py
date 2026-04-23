@@ -1,16 +1,3 @@
-import os
-import torch
-import torch.optim as optim
-import torch.nn as nn
-from torch.utils.data import DataLoader, Subset
-from collections import defaultdict, OrderedDict
-import random
-import copy
-from tqdm.auto import tqdm
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-import pandas as pd
-import numpy as np
-from datetime import datetime
 from community_dp import (
     RegressionDataset,
     get_update,
@@ -19,6 +6,20 @@ from community_dp import (
     clip,
     get_noise_multiplier,
 )
+from datetime import datetime
+import numpy as np
+import pandas as pd
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from tqdm.auto import tqdm
+import copy
+import random
+from collections import defaultdict, OrderedDict
+from torch.utils.data import DataLoader, Subset
+import torch.nn as nn
+import torch.optim as optim
+import torch
+import os
+# os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Disabled: use GPU if available
 
 
 try:
@@ -33,7 +34,8 @@ Nbr_selected_Counties = 100
 FED_rounds = 75
 sensitivity = 0.5
 DELTA = 10**-5
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 day_f = 7
 day_before = 10
 p_train = 0.9
@@ -43,6 +45,7 @@ SEED = 1832
 random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
+trailing = True  # True: trailing (causal) 7-day MA; False: centered 7-day MA
 
 if scale_to_relative:
     sensitivity = sensitivity / 1000
@@ -61,7 +64,9 @@ if year == 2020:
 
 # --- County-Specific Data Loading and Preprocessing ---
 DATA_BASE_PATH = os.path.join(os.getcwd(), "casedata")
-COUNTY_CASES_FILE = os.path.join(DATA_BASE_PATH, "cases_all_county_ma7.json")
+_ma_suffix = "ma7_trailing" if trailing else "ma7"
+COUNTY_CASES_FILE = os.path.join(
+    DATA_BASE_PATH, f"cases_all_county_{_ma_suffix}.json")
 COUNTY_POP_FILE = os.path.join(DATA_BASE_PATH, "county_population.json")
 path_json = COUNTY_CASES_FILE
 
@@ -258,6 +263,116 @@ def split_county_data(X_processed, Y_processed, p_train=0.9):
     return X_final, Y_processed, Dic_indices_train_county, list_indices_test_county, test_county_ids
 
 
+# --- Analysis Function for Population-Stratified Performance ---
+def analyze_performance_by_population(all_raw_results, path_pop_data, output_filename):
+    """
+    Analyzes model performance stratified by county population size.
+    Creates population bins and calculates metrics for each bin.
+    """
+    print("\n--- Analyzing Performance by County Population Size ---")
+
+    # Load population data
+    pop_data = pd.read_json(path_pop_data)
+    pop_dict = dict(zip(pop_data['ID_County'], pop_data['Population']))
+
+    # Define population bins (adjust these thresholds as needed)
+    bins = [0, 50000, 100000, 200000, 500000, float('inf')]
+    bin_labels = ['0-50k', '50-100k', '100-200k', '200-500k', '>500k']
+
+    results_by_pop = []
+
+    for result in all_raw_results:
+        epsilon = result['Epsilon']
+        run = result['run']
+
+        # Get raw numpy arrays
+        y_pred = result.get('y_pred_raw')
+        y_true = result.get('y_true_raw')
+        test_ids = result.get('test_ids_raw')
+
+        if y_pred is None or y_true is None or test_ids is None:
+            continue
+
+        # Group predictions by population bin
+        for i, bin_label in enumerate(bin_labels):
+            bin_min = bins[i]
+            bin_max = bins[i+1]
+
+            # Find indices in this population range
+            indices_in_bin = []
+            for idx, county_id in enumerate(test_ids):
+                pop = pop_dict.get(int(county_id), 0)
+                if bin_min <= pop < bin_max:
+                    indices_in_bin.append(idx)
+
+            if len(indices_in_bin) == 0:
+                continue  # Skip empty bins
+
+            # Extract predictions for this bin
+            y_pred_bin = y_pred[indices_in_bin]
+            y_true_bin = y_true[indices_in_bin]
+
+            # Calculate metrics for this bin
+            mse_bin = mean_squared_error(y_true_bin, y_pred_bin)
+            mae_bin = mean_absolute_error(y_true_bin, y_pred_bin)
+
+            # Calculate MAPE
+            mask = y_true_bin != 0
+            if np.any(mask):
+                mape_bin = np.mean(
+                    np.abs((y_true_bin[mask] - y_pred_bin[mask]) / y_true_bin[mask])) * 100
+            else:
+                mape_bin = np.nan
+
+            # Calculate MdAPE
+            if np.any(mask):
+                mdape_bin = np.median(
+                    np.abs((y_true_bin[mask] - y_pred_bin[mask]) / y_true_bin[mask])) * 100
+            else:
+                mdape_bin = np.nan
+
+            # Calculate R2
+            if len(y_true_bin) > 1:
+                r2_bin = r2_score(y_true_bin, y_pred_bin)
+            else:
+                r2_bin = np.nan
+
+            results_by_pop.append({
+                'Epsilon': epsilon,
+                'Run': run,
+                'Population_Bin': bin_label,
+                'N_Samples': len(indices_in_bin),
+                'MSE': mse_bin,
+                'MAE': mae_bin,
+                'MAPE (%)': mape_bin,
+                'MdAPE (%)': mdape_bin,
+                'R2': r2_bin
+            })
+
+    # Convert to DataFrame and save
+    if results_by_pop:
+        df_pop = pd.DataFrame(results_by_pop)
+        df_pop.to_csv(output_filename, index=False)
+        print(f"Population-stratified results saved to {output_filename}")
+
+        # Display aggregated statistics
+        print("\n--- Performance by Population Size (Aggregated over all runs) ---")
+        agg_metrics = df_pop.groupby(['Epsilon', 'Population_Bin']).agg({
+            'N_Samples': 'mean',
+            'MSE': ['mean', 'std'],
+            'MAE': ['mean', 'std'],
+            'MAPE (%)': ['mean', 'std'],
+            'MdAPE (%)': ['mean', 'std'],
+            'R2': ['mean', 'std']
+        })
+        print(agg_metrics)
+
+        return df_pop
+    else:
+        print("No population-stratified results to save.")
+        return None
+
+
 # --- Experiment Function ---
 def run_county_experiment(epsilon_value, dataset, list_indices_test, test_county_ids_for_unscaling, run_idx, Dic_indices_train_county, keys_train_county, NUM_FEATURES, device):
     print(
@@ -321,6 +436,16 @@ def run_county_experiment(epsilon_value, dataset, list_indices_test, test_county
 
     # --- Test Dataset ---
     test_dataset = Subset(dataset, list_indices_test)
+
+    # --- Loaders for loss curve evaluation (created once, reused every round) ---
+    all_train_indices = [
+        idx for indices in Dic_indices_train_county.values() for idx in indices]
+    train_eval_loader = DataLoader(
+        Subset(dataset, all_train_indices), batch_size=256, shuffle=False)
+    test_eval_loader = DataLoader(test_dataset, batch_size=256, shuffle=False)
+    eval_criterion = nn.MSELoss()
+
+    loss_curve = []  # list of dicts: {round, train_mse, test_mse}
 
     # --- Training Loop ---
     if not keys_train_county:
@@ -424,6 +549,30 @@ def run_county_experiment(epsilon_value, dataset, list_indices_test, test_county
                     ref_model.state_dict(), final_update)
                 ref_model.load_state_dict(global_weights)
 
+            # --- Per-round loss evaluation ---
+            ref_model.eval()
+            with torch.no_grad():
+                train_losses = [eval_criterion(ref_model(Xb.to(device)), yb.unsqueeze(1).to(device)).item()
+                                for Xb, yb in train_eval_loader]
+                test_preds_r, test_trues_r = [], []
+                for Xb, yb in test_eval_loader:
+                    preds = ref_model(Xb.to(device)).squeeze(1).cpu().numpy()
+                    test_preds_r.extend(preds)
+                    test_trues_r.extend(yb.numpy())
+                test_losses = [((p - t) ** 2)
+                               for p, t in zip(test_preds_r, test_trues_r)]
+                test_preds_r = np.array(test_preds_r)
+                test_trues_r = np.array(test_trues_r)
+                mask_r = test_trues_r != 0
+                test_mape_r = float(np.mean(np.abs(
+                    (test_trues_r[mask_r] - test_preds_r[mask_r]) / test_trues_r[mask_r])) * 100) if mask_r.any() else float('nan')
+            loss_curve.append({
+                'round': e,
+                'train_mse': float(np.mean(train_losses)),
+                'test_mse':  float(np.mean(test_losses)),
+                'test_mape': test_mape_r,
+            })
+
     # --- Evaluation ---
     # Use the scaled test dataset
     Sub_test = test_dataset
@@ -509,16 +658,27 @@ def run_county_experiment(epsilon_value, dataset, list_indices_test, test_county
         'y_pred': y_pred_unscaled_np.tolist(),
         'y_true': y_true_unscaled_np.tolist(),
         'inputs': x_test_unscaled_np.tolist(),
-        'test_ids': test_county_ids_for_unscaling.tolist()
+        'test_ids': test_county_ids_for_unscaling.tolist(),
+        'y_pred_raw': y_pred_unscaled_np,  # Keep numpy arrays for further analysis
+        'y_true_raw': y_true_unscaled_np,
+        'test_ids_raw': test_county_ids_for_unscaling,
+        'loss_curve': loss_curve,
     }
 
 
 # --- Main Execution ---
 if __name__ == "__main__":
     num_runs = 15
-    epsilon_values = [0.3, 0.5, 1.0, 2.0, float('inf')]
+    # Set fine_grid=True to run the extended epsilon grid for figure 8
+    fine_grid = True
+    if fine_grid:
+        epsilon_values = [0.2, 0.3, 0.4, 0.5, 0.75,
+                          1.0, 1.5, 2.0, 3.0, 5.0, float('inf')]
+    else:
+        epsilon_values = [0.3, 0.5, 1.0, 2.0, float('inf')]
     all_run_results_dfs = []
-    all_raw_results = []  # To store detailed results including predictions
+    all_raw_results = []   # To store detailed results including predictions
+    all_loss_curves = []   # To store per-round train/test loss for each run × epsilon
 
     # Load County Data
     county_data_raw = load_county_data(path_json)
@@ -576,6 +736,14 @@ if __name__ == "__main__":
                             results_with_run = results.copy()
                             results_with_run['run'] = run_idx + 1
                             all_raw_results.append(results_with_run)
+
+                            # Store loss curve entries
+                            for entry in results.get('loss_curve', []):
+                                all_loss_curves.append({
+                                    'epsilon': results['Epsilon'],
+                                    'run': run_idx + 1,
+                                    **entry,
+                                })
 
                             # Prepare results for DataFrame (without list-like objects)
                             metrics_for_df = {k: v for k,
@@ -637,11 +805,29 @@ if __name__ == "__main__":
                             raw_results_df = pd.DataFrame(all_raw_results)
 
                             # Define the filename
-                            csv_filename = f"year-{year}_county_predictions_scaled-{scale_to_relative}_runs-{num_runs}_rounds-{FED_rounds}.csv"
+                            _ma_label = "trailing" if trailing else "centered"
+                            _grid_label = "_fine-eps" if fine_grid else ""
+                            csv_filename = f"year-{year}_county_predictions_scaled-{scale_to_relative}_runs-{num_runs}_rounds-{FED_rounds}_ma-{_ma_label}{_grid_label}.csv"
 
                             # Save the DataFrame to a CSV file
                             raw_results_df.to_csv(csv_filename, index=False)
                             print(f"\nRaw results saved to {csv_filename}")
+
+                            # --- Save loss curves ---
+                            if all_loss_curves:
+                                loss_curve_filename = f"year-{year}_loss_curves_scaled-{scale_to_relative}_runs-{num_runs}_rounds-{FED_rounds}_ma-{_ma_label}{_grid_label}.csv"
+                                pd.DataFrame(all_loss_curves).to_csv(
+                                    loss_curve_filename, index=False)
+                                print(
+                                    f"Loss curves saved to {loss_curve_filename}")
+
+                            # --- Analyze Performance by Population Size ---
+                            pop_analysis_filename = f"year-{year}_county_predictions_by_population_scaled-{scale_to_relative}_runs-{num_runs}_rounds-{FED_rounds}_ma-{_ma_label}.csv"
+                            analyze_performance_by_population(
+                                all_raw_results,
+                                COUNTY_POP_FILE,
+                                pop_analysis_filename
+                            )
 
                     else:
                         print("\nNo results to aggregate.")
