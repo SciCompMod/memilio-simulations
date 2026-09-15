@@ -23,6 +23,7 @@ option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_b_and_f "Build simulations fro
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_c_and_f "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 6c, f." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_d "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 6d." OFF)
 option(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_e "Build simulations from folder 2026_Bicker_et_al_Memilio_paper for Figure 6e." OFF)
+option(BUILD_2026_Wendler_et_al_Higher_order "Build simulations from folder 2026_Wendler_et_al_Higher_order_IDE." OFF)
 
 # We require the library hdf5 for all targets.
 find_package(HDF5 REQUIRED)
@@ -178,4 +179,13 @@ if(BUILD_2026_Bicker_et_al_Memilio_paper-Fig6_e)
 
   execute_process(COMMAND cmake ".." WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_e/build")
   execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Bicker_et_al_Memilio_paper/Fig6_e/build")
+endif()
+
+if(BUILD_2026_Wendler_et_al_Higher_order)
+  if(NOT EXISTS "${CMAKE_SOURCE_DIR}/2026_Wendler_et_al_Higher_order_IDE/build")
+    execute_process(COMMAND mkdir "build/" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Wendler_et_al_Higher_order_IDE")
+  endif()
+
+  execute_process(COMMAND cmake ".." WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Wendler_et_al_Higher_order_IDE/build")
+  execute_process(COMMAND cmake "--build" "." "-j${NUM_JOBS_BUILD}" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/2026_Wendler_et_al_Higher_order_IDE/build")
 endif()
