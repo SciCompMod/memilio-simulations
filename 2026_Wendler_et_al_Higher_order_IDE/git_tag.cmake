@@ -1,2 +1,2 @@
 # GIT_TAG_MEMILIO can be set to a commit hash or a branch name.
-set(GIT_TAG_MEMILIO "9d2ab9e847bd0e572f11fd2ba26a1c700f193e4f")
+set(GIT_TAG_MEMILIO "0f5bb083d9a95b9f0a7fac527865f85c6cb43226")

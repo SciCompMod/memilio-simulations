@@ -34,5 +34,17 @@ FetchContent_MakeAvailable(memilio)
 
 # Variables as MEMILIO_HAS_HDF5 are not in the current scope and cannot be used.
 
-add_executable(init_conditions_exp compare_init_conditions_exp.cpp)
+add_executable(init_conditions_exp init_conditions_exp.cpp)
 target_link_libraries(init_conditions_exp PRIVATE memilio ode_sir ide_sir)
+
+add_executable(init_conditions_erlang init_conditions_erlang.cpp)
+target_link_libraries(init_conditions_erlang PRIVATE memilio lct_sir ide_sir)
+
+add_executable(convergence_constant_contacts convergence_constant_contacts.cpp)
+target_link_libraries(convergence_constant_contacts PRIVATE memilio ode_sir ide_sir)
+
+add_executable(convergence_nonconstant_contacts convergence_nonconstant_contacts.cpp)
+target_link_libraries(convergence_nonconstant_contacts PRIVATE memilio ode_sir ide_sir)
+
+add_executable(runtime_smoother runtime_smoother.cpp)
+target_link_libraries(runtime_smoother PRIVATE memilio)
