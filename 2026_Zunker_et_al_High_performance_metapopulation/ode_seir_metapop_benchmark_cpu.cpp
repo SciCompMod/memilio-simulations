@@ -1,0 +1,521 @@
+/*
+* Copyright (C) 2020-2026 MEmilio
+*
+* Authors: Henrik Zunker
+*
+* Contact: Martin J. Kuehn <Martin.Kuehn@DLR.de>
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/
+
+#include "benchmark/benchmark.h"
+#include "ode_seir_metapop_benchmark.h"
+#include "ode_seir_runtime_scenario.h"
+#include "ode_seir_world_application.h"
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <iostream>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
+namespace mio::benchmark_mio
+{
+namespace scenario = mio::runtime_scenario;
+
+#ifdef _OPENMP
+inline constexpr std::array<int, 5> scalability_thread_counts           = {1, 16, 32, 64, 128};
+inline constexpr std::array<std::pair<int, int>, 5> weak_scaling_shapes = {
+    std::pair{512, 1}, std::pair{2048, 16}, std::pair{2896, 32}, std::pair{4096, 64}, std::pair{5792, 128}};
+
+template <int G, int Stage>
+void advance_openmp_stage(ImplicitProblem& problem, double dt)
+{
+    const int patches                  = problem.patches;
+    const std::vector<double>& current = Stage == 0 ? problem.state : problem.stage_state;
+
+#pragma omp for schedule(static)
+    for (int patch = 0; patch < patches; ++patch) {
+        std::array<double, G> aggregate{};
+        const double* commuting = problem.commuting_transpose_row_major.data() + static_cast<size_t>(patch) * patches;
+        if constexpr (G == 1) {
+            double value = 0.0;
+#pragma omp simd reduction(+ : value)
+            for (int origin = 0; origin < patches; ++origin) {
+                value += commuting[origin] * current[static_cast<size_t>(2) * patches + origin];
+            }
+            aggregate[0] = value;
+        }
+        else {
+            for (int origin = 0; origin < patches; ++origin) {
+                const double mobility = commuting[origin];
+                for (int group = 0; group < G; ++group) {
+                    aggregate[group] = std::fma(
+                        mobility, current[static_cast<size_t>(3 * group + 2) * patches + origin], aggregate[group]);
+                }
+            }
+        }
+        for (int group = 0; group < G; ++group) {
+            const size_t index           = static_cast<size_t>(group) * patches + patch;
+            problem.present_share[index] = aggregate[group] * problem.inverse_present_population[index];
+        }
+    }
+
+#pragma omp for schedule(static)
+    for (int patch = 0; patch < patches; ++patch) {
+        std::array<double, G> aggregate{};
+        const double* commuting = problem.commuting_row_major.data() + static_cast<size_t>(patch) * patches;
+        if constexpr (G == 1) {
+            double value = 0.0;
+#pragma omp simd reduction(+ : value)
+            for (int destination = 0; destination < patches; ++destination) {
+                value += commuting[destination] * problem.present_share[destination];
+            }
+            aggregate[0] = value;
+        }
+        else {
+            for (int destination = 0; destination < patches; ++destination) {
+                const double mobility = commuting[destination];
+                for (int group = 0; group < G; ++group) {
+                    aggregate[group] =
+                        std::fma(mobility, problem.present_share[static_cast<size_t>(group) * patches + destination],
+                                 aggregate[group]);
+                }
+            }
+        }
+        advance_cpu_patch<G, Stage>(problem, current, patch, aggregate, dt);
+    }
+}
+
+template <int G>
+void advance_openmp(ImplicitProblem& problem, int threads, double dt = step_size, int steps = integration_steps)
+{
+    if (threads <= 0) {
+        throw std::invalid_argument("The OpenMP thread count must be positive.");
+    }
+#pragma omp parallel num_threads(threads)
+    {
+        for (int step = 0; step < steps; ++step) {
+            advance_openmp_stage<G, 0>(problem, dt);
+            advance_openmp_stage<G, 1>(problem, dt);
+            advance_openmp_stage<G, 2>(problem, dt);
+            advance_openmp_stage<G, 3>(problem, dt);
+        }
+    }
+}
+
+#ifdef MEMILIO_BENCHMARK_ROOFLINE
+template <int G>
+void advance_openmp_roofline(ImplicitProblem& problem, int threads, scenario::Schedule time)
+{
+    if (threads <= 0)
+        throw std::invalid_argument("CPU roofline requires OpenMP threads.");
+    const int measured_day = mio::benchmark_roofline::selected_day() - 1;
+#pragma omp parallel num_threads(threads)
+    {
+        for (int day = 0; day < time.days; ++day) {
+            const auto advance_day = [&] {
+                for (int step = 0; step < 2 * time.half_day_steps; ++step) {
+                    advance_openmp_stage<G, 0>(problem, time.dt());
+                    advance_openmp_stage<G, 1>(problem, time.dt());
+                    advance_openmp_stage<G, 2>(problem, time.dt());
+                    advance_openmp_stage<G, 3>(problem, time.dt());
+                }
+            };
+            if (day == measured_day)
+                mio::benchmark_roofline::cpu_region("implicit_integration", advance_day);
+            else
+                advance_day();
+        }
+    }
+}
+#endif
+#endif
+
+void set_counters(benchmark::State& state, const ImplicitProblem& problem, int threads = 0)
+{
+    state.counters["patches"]    = problem.patches;
+    state.counters["age_groups"] = problem.groups;
+    state.counters["steps"]      = integration_steps;
+    if (threads > 0) {
+        state.counters["threads"] = threads;
+    }
+}
+
+template <int G>
+void benchmark_serial_impl(benchmark::State& state)
+{
+    ImplicitProblem problem(static_cast<int>(state.range(0)), G);
+    for (auto _ : state) {
+        state.PauseTiming();
+        problem.reset_state();
+        state.ResumeTiming();
+        advance_cpu<G>(problem);
+        benchmark::DoNotOptimize(problem.state.data());
+        benchmark::ClobberMemory();
+    }
+    set_counters(state, problem);
+}
+
+void benchmark_serial(benchmark::State& state)
+{
+    switch (static_cast<int>(state.range(1))) {
+    case 1:
+        benchmark_serial_impl<1>(state);
+        break;
+    case 3:
+        benchmark_serial_impl<3>(state);
+        break;
+    case 6:
+        benchmark_serial_impl<6>(state);
+        break;
+    case 8:
+        benchmark_serial_impl<8>(state);
+        break;
+    default:
+        state.SkipWithError("Unsupported age-group count.");
+    }
+}
+
+#ifdef _OPENMP
+template <int G>
+void benchmark_openmp_impl(benchmark::State& state)
+{
+    const int threads = static_cast<int>(state.range(2));
+    ImplicitProblem problem(static_cast<int>(state.range(0)), G);
+    for (auto _ : state) {
+        state.PauseTiming();
+        problem.reset_state();
+        state.ResumeTiming();
+        advance_openmp<G>(problem, threads);
+        benchmark::DoNotOptimize(problem.state.data());
+        benchmark::ClobberMemory();
+    }
+    set_counters(state, problem, threads);
+}
+
+void benchmark_openmp(benchmark::State& state)
+{
+    switch (static_cast<int>(state.range(1))) {
+    case 1:
+        benchmark_openmp_impl<1>(state);
+        break;
+    case 3:
+        benchmark_openmp_impl<3>(state);
+        break;
+    case 6:
+        benchmark_openmp_impl<6>(state);
+        break;
+    case 8:
+        benchmark_openmp_impl<8>(state);
+        break;
+    default:
+        state.SkipWithError("Unsupported age-group count.");
+    }
+}
+#endif
+
+void apply_shapes(benchmark::internal::Benchmark* benchmark)
+{
+    for (int patches : patch_counts) {
+        for (int groups : age_group_counts) {
+            benchmark->Args({patches, groups});
+        }
+    }
+    benchmark->Args({implicit_strong_scaling_patches, 6});
+}
+
+#ifdef _OPENMP
+void apply_openmp_shapes(benchmark::internal::Benchmark* benchmark)
+{
+    constexpr int maximum_threads = scalability_thread_counts.back();
+    for (int patches : patch_counts) {
+        for (int groups : age_group_counts) {
+            benchmark->Args({patches, groups, maximum_threads});
+        }
+    }
+    for (int threads : scalability_thread_counts) {
+        benchmark->Args({implicit_strong_scaling_patches, 6, threads});
+    }
+    for (const auto& [patches, threads] : weak_scaling_shapes) {
+        benchmark->Args({patches, 6, threads});
+    }
+}
+
+template <int G>
+bool validate_openmp(int threads, std::string& error)
+{
+    constexpr int validation_patches = 263;
+    ImplicitProblem serial(validation_patches, G);
+    ImplicitProblem parallel(validation_patches, G);
+    advance_cpu<G>(serial);
+    advance_openmp<G>(parallel, threads);
+
+    double maximum_absolute_error = 0.0;
+    double maximum_relative_error = 0.0;
+    bool values_match             = true;
+    for (size_t index = 0; index < serial.state.size(); ++index) {
+        const double absolute_error = std::abs(serial.state[index] - parallel.state[index]);
+        const double relative_error =
+            absolute_error / std::max(validation_absolute_denominator, std::abs(serial.state[index]));
+        maximum_absolute_error = std::max(maximum_absolute_error, absolute_error);
+        maximum_relative_error = std::max(maximum_relative_error, relative_error);
+        if (!std::isfinite(parallel.state[index]) ||
+            absolute_error > validation_relative_tolerance * (1.0 + std::abs(serial.state[index]))) {
+            values_match = false;
+        }
+    }
+    std::cout << "OpenMP validation N_G=" << G << ": max_abs=" << maximum_absolute_error
+              << ", max_rel=" << maximum_relative_error << '\n';
+    if (!values_match) {
+        error = "Serial and OpenMP results differ for N_G=" + std::to_string(G) +
+                " (max_abs=" + std::to_string(maximum_absolute_error) +
+                ", max_rel=" + std::to_string(maximum_relative_error) + ").";
+    }
+    return values_match;
+}
+
+bool validate_openmp_all(std::string& error)
+{
+    const int threads = omp_get_max_threads();
+    return validate_openmp<1>(threads, error) && validate_openmp<3>(threads, error) &&
+           validate_openmp<6>(threads, error) && validate_openmp<8>(threads, error);
+}
+#endif
+
+template <int G>
+void runtime_benchmark_impl(benchmark::State& state, int threads)
+{
+    try {
+        scenario::Inputs inputs(static_cast<int>(state.range(0)), G);
+        const auto time = scenario::schedule();
+        ImplicitProblem problem(inputs.p, G);
+        scenario::configure_implicit(problem, inputs);
+#ifdef MEMILIO_BENCHMARK_ROOFLINE
+        const bool roofline = mio::benchmark_roofline::enabled();
+        mio::benchmark_roofline::CpuSession markers({"implicit_integration"});
+#endif
+        for (auto _ : state) {
+            state.PauseTiming();
+            problem.reset_state();
+            state.ResumeTiming();
+#ifdef _OPENMP
+#ifdef MEMILIO_BENCHMARK_ROOFLINE
+            if (roofline)
+                advance_openmp_roofline<G>(problem, threads, time);
+            else
+#endif
+            if (threads > 0)
+                advance_openmp<G>(problem, threads, time.dt(), time.total_steps());
+            else
+#endif
+                advance_cpu<G>(problem, time.dt(), time.total_steps());
+            benchmark::DoNotOptimize(problem.state.data());
+            benchmark::ClobberMemory();
+        }
+        scenario::check_population(inputs, scenario::implicit_residents(inputs, problem.state));
+#ifdef MEMILIO_BENCHMARK_ROOFLINE
+        markers.check();
+        if (roofline)
+            state.counters["roofline_profile_window_completed"] = 1;
+#endif
+        scenario::counters(state, inputs, false, threads > 0 ? threads : 1);
+    }
+    catch (const std::exception& error) {
+        state.SkipWithError(error.what());
+    }
+}
+
+void runtime_dispatch(benchmark::State& state, int threads)
+{
+    switch (static_cast<int>(state.range(1))) {
+    case 1:
+        runtime_benchmark_impl<1>(state, threads);
+        break;
+    case 3:
+        runtime_benchmark_impl<3>(state, threads);
+        break;
+    case 6:
+        runtime_benchmark_impl<6>(state, threads);
+        break;
+    case 8:
+        runtime_benchmark_impl<8>(state, threads);
+        break;
+    default:
+        state.SkipWithError("Unsupported runtime age groups.");
+    }
+}
+void runtime_serial(benchmark::State& state)
+{
+    runtime_dispatch(state, 0);
+}
+void runtime_openmp(benchmark::State& state)
+{
+    runtime_dispatch(state, static_cast<int>(state.range(2)));
+}
+
+template <int G>
+void validate_runtime()
+{
+    for (bool no_mobility : {false, true}) {
+        scenario::Inputs inputs(3, G, no_mobility);
+        for (int phase_steps : {1, 32}) {
+            const scenario::Schedule time{2, phase_steps};
+            const auto expected = scenario::Reference(inputs, false).run(time);
+            ImplicitProblem serial(inputs.p, G);
+            scenario::configure_implicit(serial, inputs);
+            advance_cpu<G>(serial, time.dt(), time.total_steps());
+            scenario::compare(inputs, expected, scenario::implicit_residents(inputs, serial.state));
+#ifdef _OPENMP
+            serial.reset_state();
+            advance_openmp<G>(serial, omp_get_max_threads(), time.dt(), time.total_steps());
+            scenario::compare(inputs, expected, scenario::implicit_residents(inputs, serial.state));
+#endif
+        }
+    }
+    std::cout << "Runtime implicit full-state reference N_G=" << G << ": passed\n";
+}
+
+template <int G>
+void run_world(const scenario::Inputs& inputs, int threads)
+{
+    const auto time = mio::world_application::schedule();
+    const int steps = 2 * time.half_day_steps;
+    ImplicitProblem problem(inputs.p, G);
+    scenario::configure_implicit(problem, inputs);
+    mio::world_application::simulate(
+        inputs, mio::world_application::cpu_model("implicit", threads), time,
+        [&problem, &time, steps, threads] {
+#ifdef _OPENMP
+            if (threads > 0) {
+                advance_openmp<G>(problem, threads, time.dt(), steps);
+                return;
+            }
+#endif
+            advance_cpu<G>(problem, time.dt(), steps);
+        },
+        [&inputs, &problem] {
+            return scenario::implicit_residents(inputs, problem.state);
+        });
+}
+
+int run_world()
+{
+    try {
+        const auto inputs = mio::world_application::load_inputs();
+        const int threads = mio::world_application::threads();
+#ifndef _OPENMP
+        if (threads > 0) {
+            throw std::invalid_argument("WORLD_THREADS requires OpenMP support.");
+        }
+#endif
+        switch (inputs.g) {
+        case 1:
+            run_world<1>(inputs, threads);
+            break;
+        case 3:
+            run_world<3>(inputs, threads);
+            break;
+        case 6:
+            run_world<6>(inputs, threads);
+            break;
+        case 8:
+            run_world<8>(inputs, threads);
+            break;
+        default:
+            throw std::runtime_error("Unsupported number of age groups.");
+        }
+        return 0;
+    }
+    catch (const std::exception& error) {
+        std::cerr << "World application failed: " << error.what() << '\n';
+        return 1;
+    }
+}
+
+} // namespace mio::benchmark_mio
+
+BENCHMARK(mio::benchmark_mio::benchmark_serial)
+    ->Apply(mio::benchmark_mio::apply_shapes)
+    ->ArgNames({"patches", "age_groups"})
+    ->Name("implicit/serial")
+    ->UseRealTime();
+
+#ifdef _OPENMP
+BENCHMARK(mio::benchmark_mio::benchmark_openmp)
+    ->Apply(mio::benchmark_mio::apply_openmp_shapes)
+    ->ArgNames({"patches", "age_groups", "threads"})
+    ->Name("implicit/openmp")
+    ->UseRealTime();
+#endif
+
+int main(int argc, char** argv)
+{
+#ifdef _OPENMP
+    omp_set_dynamic(0);
+#endif
+    if (mio::world_application::enabled()) {
+        return mio::benchmark_mio::run_world();
+    }
+    const bool runtime    = mio::runtime_scenario::enabled();
+    bool needs_validation = true;
+    for (int i = 1; i < argc; ++i) {
+        const std::string_view arg(argv[i]);
+        if (mio::runtime_scenario::informational_argument(arg))
+            needs_validation = false;
+    }
+    if (runtime) {
+        mio::runtime_scenario::register_shapes("runtime/implicit/serial", mio::benchmark_mio::runtime_serial);
+#ifdef _OPENMP
+        mio::runtime_scenario::register_shapes("runtime/implicit/openmp", mio::benchmark_mio::runtime_openmp,
+                                               omp_get_max_threads());
+#endif
+    }
+    ::benchmark::Initialize(&argc, argv);
+    if (::benchmark::ReportUnrecognizedArguments(argc, argv)) {
+        return 1;
+    }
+    try {
+        if (runtime && needs_validation) {
+            mio::runtime_scenario::validate_accuracy();
+            mio::benchmark_mio::validate_runtime<1>();
+            mio::benchmark_mio::validate_runtime<3>();
+            mio::benchmark_mio::validate_runtime<6>();
+            mio::benchmark_mio::validate_runtime<8>();
+        }
+    }
+    catch (const std::exception& error) {
+        std::cerr << "Runtime validation failed: " << error.what() << '\n';
+        ::benchmark::Shutdown();
+        return 1;
+    }
+#ifdef _OPENMP
+    std::string error;
+    if (!runtime && needs_validation && !mio::benchmark_mio::validate_openmp_all(error)) {
+        std::cerr << error << '\n';
+        ::benchmark::Shutdown();
+        return 1;
+    }
+#endif
+    ::benchmark::RunSpecifiedBenchmarks();
+    ::benchmark::Shutdown();
+    return 0;
+}

@@ -1,0 +1,5 @@
+results/
+figures/
+world/data/
+world/*.asc
+world/*.geojson
