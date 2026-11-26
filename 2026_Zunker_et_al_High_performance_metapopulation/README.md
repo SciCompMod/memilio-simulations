@@ -1,7 +1,7 @@
 # Information
 
 - **Title:**  
-  High-performance metapopulation models for epidemic emergencies: Performance analysis of implicit and explicit mobility simulations on CPUs and GPUs
+  High-performance metapopulation models for epidemic emergencies: Scalability and performance of implicit and explicit mobility representations on CPUs and GPUs
 - **Authors:**  
   Henrik Zunker, Carlotta Gerstein, Martin J. Kühn
 
